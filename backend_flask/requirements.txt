@@ -1,0 +1,8 @@
+flask
+flask-cors
+
+# Flask-CORS (Cross-Origin Resource Sharing) lets your React app
+# communicate with your Flask backend even though they run on different ports (3000 vs 5000).
+
+# Flask is the main web framework.
+# It allows you to build web servers and handle routes like /students or /login.
