@@ -1,46 +1,55 @@
 // import react and hooks
-import React, { useEffect, useState } from "react"; 
+import React, { useEffect, useState } from "react";
+import TutorSearch from "./components/TutorSearch"; // ✅ Tutor Search component
+import TutorSignup from "./components/TutorSignup"; // ✅ Tutor Signup component
+import AdminDashboard from "./components/AdminDashboard"; // ✅ Admin Dashboard component
 
-function App() { // function component for app
-  const [students, setStudents] = useState([]); //stores list of all students fetched from backend
-  const [formData, setFormData] = useState({ // stores input data from the form
+function App() {
+  // ✅ Controls which page is shown
+  const [currentPage, setCurrentPage] = useState("students");
+
+  // ------------------------------
+  // STUDENT SYSTEM STATE + LOGIC
+  // ------------------------------
+  const [students, setStudents] = useState([]);
+  const [formData, setFormData] = useState({
     first_name: "",
     last_name: "",
     college_email: "",
   });
-  const [editId, setEditId] = useState(null); //keeps track of what student is being edited
+  const [editId, setEditId] = useState(null);
 
-  const API_URL = "http://localhost:5000/students"; // flask backend api url
+  const API_URL = "http://localhost:5000/students"; // Flask backend API URL
 
   // Fetch all students on load
   useEffect(() => {
     fetchStudents();
   }, []);
 
-  //use effect - runs auto when page loads and fetches studnets from backend
   const fetchStudents = async () => {
     try {
-      const res = await fetch(API_URL); // sends get request to flask
-      const data = await res.json(); //converts json resonse to json object
-      setStudents(data); // saves it and renders table
+      const res = await fetch(API_URL);
+      const data = await res.json();
+      setStudents(data);
     } catch (error) {
       console.error("Error fetching students:", error);
     }
   };
-//function to add or update form
+
+  // Add or update a student
   const handleSubmit = async (e) => {
-    e.preventDefault(); // Prevent page reload
+    e.preventDefault();
 
     if (!formData.first_name || !formData.last_name || !formData.college_email) {
       alert("Please fill out all fields");
       return;
     }
 
-    try { // fpr editing students will upodate here
+    try {
       if (editId) {
         // UPDATE existing student
         await fetch(`${API_URL}/${editId}`, {
-          method: "PUT", // update request
+          method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(formData),
         });
@@ -54,24 +63,23 @@ function App() { // function component for app
         });
       }
 
-      // Clear form & reload students
+      // Clear form and reload
       setFormData({ first_name: "", last_name: "", college_email: "" });
       fetchStudents();
     } catch (error) {
       console.error("Error saving student:", error);
     }
   };
-// function populates form when editing
+
   const handleEdit = (student) => {
     setFormData({
       first_name: student.first_name,
       last_name: student.last_name,
       college_email: student.college_email,
     });
-    setEditId(student.id);  // stores id of student being edited
+    setEditId(student.id);
   };
 
-  //delete student
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this student?")) return;
 
@@ -83,76 +91,126 @@ function App() { // function component for app
     }
   };
 
+  // ------------------------------
+  // FRONTEND DISPLAY
+  // ------------------------------
   return (
-    <div style={{ width: "80%", margin: "40px auto", textAlign: "center" }}>
-      <h1 style={{ fontWeight: "bold" }}>Student Registration</h1>
-        {/* Form section for input fields */}
-      <form onSubmit={handleSubmit} style={{ marginBottom: "20px" }}>
-        <input
-          placeholder="First Name"
-          value={formData.first_name}
-          onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-        />
-        <input
-          placeholder="Last Name"
-          value={formData.last_name}
-          onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-        />
-        <input
-          placeholder="College Email"
-          value={formData.college_email}
-          onChange={(e) => setFormData({ ...formData, college_email: e.target.value })}
-        />
-        <button type="submit" style={{ marginLeft: "10px" }}>
-          {editId ? "Update" : "Save"}
-        </button>
-      </form>
-      {/* Table shows all saved students */}
-      <h2>Saved Students</h2>
-      <table
-        border="1"
-        style={{
-          width: "70%",
-          margin: "0 auto",
-          borderCollapse: "collapse",
-        }}
-      >
-        <thead>
-          <tr style={{ backgroundColor: "#f2f2f2" }}>
-            <th>First Name</th>
-            <th>Last Name</th>
-            <th>Email</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        {/* loops through students and displays each record */}
-        <tbody>
-          {students.length > 0 ? (
-            students.map((student) => (
-              <tr key={student.id}>
-                <td>{student.first_name}</td>
-                <td>{student.last_name}</td>
-                <td>{student.college_email}</td>
-                <td>
-                  <button
-                    onClick={() => handleEdit(student)}
-                    style={{ marginRight: "10px" }}
-                  >
-                    Edit
-                  </button>
-                  <button onClick={() => handleDelete(student.id)}>Delete</button>
-                </td>
+    <div style={{ width: "85%", margin: "40px auto", textAlign: "center" }}>
+      {/* ✅ Navigation buttons */}
+      <div style={{ marginBottom: "30px" }}>
+        {["students", "tutors", "signup", "admin"].map((page) => (
+          <button
+            key={page}
+            onClick={() => setCurrentPage(page)}
+            style={{
+              padding: "10px 20px",
+              marginRight: "10px",
+              backgroundColor: currentPage === page ? "#007bff" : "#ccc",
+              color: "white",
+              border: "none",
+              borderRadius: "5px",
+              cursor: "pointer",
+            }}
+          >
+            {page === "students"
+              ? "Students"
+              : page === "tutors"
+              ? "Tutor Search"
+              : page === "signup"
+              ? "Tutor Signup"
+              : "Admin"}
+          </button>
+        ))}
+      </div>
+
+      {/* ✅ Conditional Rendering */}
+      {currentPage === "students" && (
+        <>
+          <h1 style={{ fontWeight: "bold" }}>Student Registration</h1>
+          <form onSubmit={handleSubmit} style={{ marginBottom: "20px" }}>
+            <input
+              placeholder="First Name"
+              value={formData.first_name}
+              onChange={(e) =>
+                setFormData({ ...formData, first_name: e.target.value })
+              }
+            />
+            <input
+              placeholder="Last Name"
+              value={formData.last_name}
+              onChange={(e) =>
+                setFormData({ ...formData, last_name: e.target.value })
+              }
+            />
+            <input
+              placeholder="College Email"
+              value={formData.college_email}
+              onChange={(e) =>
+                setFormData({ ...formData, college_email: e.target.value })
+              }
+            />
+            <button type="submit" style={{ marginLeft: "10px" }}>
+              {editId ? "Update" : "Save"}
+            </button>
+          </form>
+
+          <h2>Saved Students</h2>
+          <table
+            border="1"
+            style={{
+              width: "70%",
+              margin: "0 auto",
+              borderCollapse: "collapse",
+            }}
+          >
+            <thead>
+              <tr style={{ backgroundColor: "#f2f2f2" }}>
+                <th>First Name</th>
+                <th>Last Name</th>
+                <th>Email</th>
+                <th>Actions</th>
               </tr>
-            ))
-          ) : (
-            <tr>
-              <td colSpan="4">No students found</td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+            </thead>
+            <tbody>
+              {students.length > 0 ? (
+                students.map((student) => (
+                  <tr key={student.id}>
+                    <td>{student.first_name}</td>
+                    <td>{student.last_name}</td>
+                    <td>{student.college_email}</td>
+                    <td>
+                      <button
+                        onClick={() => handleEdit(student)}
+                        style={{ marginRight: "10px" }}
+                      >
+                        Edit
+                      </button>
+                      <button onClick={() => handleDelete(student.id)}>
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="4">No students found</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      {/* ✅ Tutor Search Page */}
+      {currentPage === "tutors" && <TutorSearch />}
+
+      {/* ✅ Tutor Signup Page */}
+      {currentPage === "signup" && <TutorSignup />}
+
+      {/* ✅ Admin Dashboard Page */}
+      {currentPage === "admin" && <AdminDashboard />}
     </div>
   );
 }
 
-export default App;  // exports component to allow react to render it
+export default App;
