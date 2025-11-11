@@ -57,10 +57,10 @@ const BookingForm = ({ tutor, learnerId, onClose, onSuccess }) => {
 
   return (
     <>
-      <div className="modal-backdrop show" onClick={onClose}></div>
-      <div className="modal show d-block" style={{ zIndex: 1050 }} tabIndex="-1" role="dialog" onClick={onClose}>
+      <div className="modal-backdrop show" onClick={onClose} style={{ zIndex: 1040 }}></div>
+      <div className="modal show d-block" style={{ zIndex: 1050 }} tabIndex="-1" role="dialog">
         <div className="modal-dialog modal-dialog-centered" onClick={(e) => e.stopPropagation()}>
-          <div className="modal-content">
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h5 className="modal-title">Book Session with {tutor.first_name} {tutor.last_name}</h5>
               <button type="button" className="btn-close" onClick={onClose} aria-label="Close"></button>

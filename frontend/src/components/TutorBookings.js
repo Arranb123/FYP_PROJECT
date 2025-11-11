@@ -43,8 +43,10 @@ const TutorBookings = ({ tutorId }) => {
 
   if (!tutorId) {
     return (
-      <div style={{ padding: "30px", textAlign: "center" }}>
-        <p>Please select a tutor to view bookings.</p>
+      <div className="container">
+        <div className="alert alert-info text-center">
+          <p>Please select a tutor to view bookings.</p>
+        </div>
       </div>
     );
   }

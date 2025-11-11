@@ -112,27 +112,48 @@ def add_student():
 @app.route('/students/<int:id>', methods=['PUT'])
 def update_student(id):
     data = request.get_json()
-    first_name = data.get('first_name')
-    last_name = data.get('last_name')
-    college_email = data.get('college_email')
+    first_name = data.get('first_name', '').strip()
+    last_name = data.get('last_name', '').strip()
+    college_email = data.get('college_email', '').strip()
 
-    conn = get_db_connection()
-    conn.execute(
-        "UPDATE students SET first_name=?, last_name=?, college_email=?, updated_at=? WHERE id=?",
-        (first_name, last_name, college_email, datetime.now(), id)
-    )
-    conn.commit()
-    conn.close()
-    return jsonify({"message": "Student updated successfully"})
+    if not all([first_name, last_name, college_email]):
+        return jsonify({"error": "Missing required fields"}), 400
+    
+    # Basic email validation
+    if '@' not in college_email:
+        return jsonify({"error": "Invalid email format"}), 400
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE students SET first_name=?, last_name=?, college_email=?, updated_at=? WHERE id=?",
+            (first_name, last_name, college_email, datetime.now(), id)
+        )
+        if cursor.rowcount == 0:
+            conn.close()
+            return jsonify({"error": "Student not found"}), 404
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "Student updated successfully"})
+    except sqlite3.Error as e:
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
 
 
 @app.route('/students/<int:id>', methods=['DELETE'])
 def delete_student(id):
-    conn = get_db_connection()
-    conn.execute("DELETE FROM students WHERE id=?", (id,))
-    conn.commit()
-    conn.close()
-    return jsonify({"message": "Student deleted successfully"})
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM students WHERE id=?", (id,))
+        if cursor.rowcount == 0:
+            conn.close()
+            return jsonify({"error": "Student not found"}), 404
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "Student deleted successfully"})
+    except sqlite3.Error as e:
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
 
 
 
@@ -201,6 +222,8 @@ def add_tutor():
         return jsonify({"message": "Tutor added successfully!", "tutor_id": new_id}), 201
     except sqlite3.IntegrityError:
         return jsonify({"error": "Email already exists"}), 400
+    except sqlite3.Error as e:
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
 
 
 
@@ -274,12 +297,18 @@ def get_unverified_tutors():
 
 @app.route('/api/tutors/<int:tutor_id>/verify', methods=['PUT'])
 def approve_tutor(tutor_id):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE tutors SET verified = 1, updated_at = ? WHERE tutor_id = ?", (datetime.now(), tutor_id))
-    conn.commit()
-    conn.close()
-    return jsonify({"message": "Tutor approved successfully!"}), 200
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE tutors SET verified = 1, updated_at = ? WHERE tutor_id = ?", (datetime.now(), tutor_id))
+        if cursor.rowcount == 0:
+            conn.close()
+            return jsonify({"error": "Tutor not found"}), 404
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "Tutor approved successfully!"}), 200
+    except sqlite3.Error as e:
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
 
 
 
@@ -287,12 +316,18 @@ def approve_tutor(tutor_id):
 
 @app.route('/api/tutors/<int:tutor_id>', methods=['DELETE'])
 def reject_tutor(tutor_id):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM tutors WHERE tutor_id = ?", (tutor_id,))
-    conn.commit()
-    conn.close()
-    return jsonify({"message": "Tutor rejected and deleted."}), 200
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM tutors WHERE tutor_id = ?", (tutor_id,))
+        if cursor.rowcount == 0:
+            conn.close()
+            return jsonify({"error": "Tutor not found"}), 404
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "Tutor rejected and deleted."}), 200
+    except sqlite3.Error as e:
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
 
 
 
@@ -399,34 +434,46 @@ def get_learner_bookings(learner_id):
 # CANCEL A BOOKING
 @app.route('/api/bookings/<int:booking_id>/cancel', methods=['PUT'])
 def cancel_booking(booking_id):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE bookings SET status = 'cancelled', updated_at = ? WHERE booking_id = ?", (datetime.now(), booking_id))
-    conn.commit()
-    conn.close()
-    return jsonify({"message": "Booking cancelled successfully!"}), 200
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE bookings SET status = 'cancelled', updated_at = ? WHERE booking_id = ?", (datetime.now(), booking_id))
+        if cursor.rowcount == 0:
+            conn.close()
+            return jsonify({"error": "Booking not found"}), 404
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "Booking cancelled successfully!"}), 200
+    except sqlite3.Error as e:
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
 
 
 # RESCHEDULE A BOOKING
 @app.route('/api/bookings/<int:booking_id>/reschedule', methods=['PUT'])
 def reschedule_booking(booking_id):
     data = request.get_json()
-    new_date = data.get('session_date')
-    new_time = data.get('session_time')
+    new_date = data.get('session_date', '').strip()
+    new_time = data.get('session_time', '').strip()
 
     if not all([new_date, new_time]):
         return jsonify({"error": "Missing required fields: session_date and session_time"}), 400
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE bookings 
-        SET session_date = ?, session_time = ?, updated_at = ?, status = 'rescheduled'
-        WHERE booking_id = ?
-    """, (new_date, new_time, datetime.now(), booking_id))
-    conn.commit()
-    conn.close()
-    return jsonify({"message": "Booking rescheduled successfully!"}), 200
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE bookings 
+            SET session_date = ?, session_time = ?, updated_at = ?, status = 'rescheduled'
+            WHERE booking_id = ?
+        """, (new_date, new_time, datetime.now(), booking_id))
+        if cursor.rowcount == 0:
+            conn.close()
+            return jsonify({"error": "Booking not found"}), 404
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "Booking rescheduled successfully!"}), 200
+    except sqlite3.Error as e:
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
 
 
 # RUN LOCALLY PORT 5000
