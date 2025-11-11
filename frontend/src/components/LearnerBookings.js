@@ -85,127 +85,88 @@ const LearnerBookings = ({ learnerId }) => {
   }
 
   return (
-    <div style={{ padding: "30px", maxWidth: "1200px", margin: "0 auto" }}>
-      <h2>My Bookings</h2>
-      <button
-        onClick={fetchBookings}
-        style={{
-          backgroundColor: "#007bff",
-          color: "white",
-          border: "none",
-          padding: "8px 16px",
-          borderRadius: "5px",
-          cursor: "pointer",
-          marginBottom: "20px"
-        }}
-      >
-        Refresh
-      </button>
+    <div className="container">
+      <div className="d-flex justify-content-between align-items-center mb-3">
+        <h2>My Bookings</h2>
+        <button className="btn btn-primary" onClick={fetchBookings}>
+          Refresh
+        </button>
+      </div>
 
-      {loading && <p>Loading bookings...</p>}
-      {error && <p style={{ color: "red" }}>{error}</p>}
+      {loading && <div className="alert alert-info">Loading bookings...</div>}
+      {error && <div className="alert alert-danger">{error}</div>}
 
       {bookings.length === 0 && !loading ? (
-        <p>No bookings found.</p>
+        <div className="alert alert-info">No bookings found.</div>
       ) : (
-        <div>
+        <div className="row g-3">
           {bookings.map((booking) => (
-            <div
-              key={booking.booking_id}
-              style={{
-                border: "1px solid #ddd",
-                borderRadius: "10px",
-                padding: "20px",
-                marginBottom: "15px",
-                backgroundColor: "#f9f9f9"
-              }}
-            >
-              <h3>{booking.tutor_name}</h3>
-              <p><strong>Modules:</strong> {booking.tutor_modules}</p>
-              <p><strong>Hourly Rate:</strong> €{booking.tutor_hourly_rate}</p>
-              <p><strong>Date:</strong> {booking.session_date}</p>
-              <p><strong>Time:</strong> {booking.session_time}</p>
-              <p><strong>Duration:</strong> {booking.duration} minutes</p>
-              <p>
-                <strong>Status:</strong>{" "}
-                <span
-                  style={{
-                    backgroundColor: getStatusColor(booking.status),
-                    color: "white",
-                    padding: "4px 8px",
-                    borderRadius: "4px",
-                    fontSize: "12px"
-                  }}
-                >
-                  {booking.status}
-                </span>
-              </p>
-              <p><strong>Booked:</strong> {new Date(booking.created_at).toLocaleString()}</p>
+            <div key={booking.booking_id} className="col-md-6">
+              <div className="card h-100">
+                <div className="card-body">
+                  <h5 className="card-title">{booking.tutor_name}</h5>
+                  <p className="card-text"><strong>Modules:</strong> {booking.tutor_modules}</p>
+                  <p className="card-text"><strong>Hourly Rate:</strong> €{booking.tutor_hourly_rate}</p>
+                  <p className="card-text"><strong>Date:</strong> {booking.session_date}</p>
+                  <p className="card-text"><strong>Time:</strong> {booking.session_time}</p>
+                  <p className="card-text"><strong>Duration:</strong> {booking.duration} minutes</p>
+                  <p className="card-text">
+                    <strong>Status:</strong>{" "}
+                    <span className="badge" style={{ backgroundColor: getStatusColor(booking.status) }}>
+                      {booking.status}
+                    </span>
+                  </p>
+                  <p className="card-text"><small className="text-muted">Booked: {new Date(booking.created_at).toLocaleString()}</small></p>
 
-              {booking.status !== "cancelled" && (
-                <div style={{ marginTop: "15px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                  <button
-                    onClick={() => handleCancel(booking.booking_id)}
-                    style={{
-                      backgroundColor: "#dc3545",
-                      color: "white",
-                      border: "none",
-                      padding: "8px 16px",
-                      borderRadius: "5px",
-                      cursor: "pointer"
-                    }}
-                  >
-                    Cancel
-                  </button>
-
-                  <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                    <input
-                      type="date"
-                      placeholder="New Date"
-                      value={rescheduleData[booking.booking_id]?.session_date || ""}
-                      onChange={(e) =>
-                        setRescheduleData({
-                          ...rescheduleData,
-                          [booking.booking_id]: {
-                            ...rescheduleData[booking.booking_id],
-                            session_date: e.target.value,
-                          },
-                        })
-                      }
-                      min={new Date().toISOString().split("T")[0]}
-                      style={{ padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
-                    />
-                    <input
-                      type="time"
-                      placeholder="New Time"
-                      value={rescheduleData[booking.booking_id]?.session_time || ""}
-                      onChange={(e) =>
-                        setRescheduleData({
-                          ...rescheduleData,
-                          [booking.booking_id]: {
-                            ...rescheduleData[booking.booking_id],
-                            session_time: e.target.value,
-                          },
-                        })
-                      }
-                      style={{ padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
-                    />
-                    <button
-                      onClick={() => handleReschedule(booking.booking_id)}
-                      style={{
-                        backgroundColor: "#17a2b8",
-                        color: "white",
-                        border: "none",
-                        padding: "8px 16px",
-                        borderRadius: "5px",
-                        cursor: "pointer"
-                      }}
-                    >
-                      Reschedule
-                    </button>
-                  </div>
+                  {booking.status !== "cancelled" && (
+                    <div className="mt-3">
+                      <button
+                        className="btn btn-danger btn-sm me-2"
+                        onClick={() => handleCancel(booking.booking_id)}
+                      >
+                        Cancel
+                      </button>
+                      <div className="input-group input-group-sm mt-2">
+                        <input
+                          type="date"
+                          className="form-control"
+                          value={rescheduleData[booking.booking_id]?.session_date || ""}
+                          onChange={(e) =>
+                            setRescheduleData({
+                              ...rescheduleData,
+                              [booking.booking_id]: {
+                                ...rescheduleData[booking.booking_id],
+                                session_date: e.target.value,
+                              },
+                            })
+                          }
+                          min={new Date().toISOString().split("T")[0]}
+                        />
+                        <input
+                          type="time"
+                          className="form-control"
+                          value={rescheduleData[booking.booking_id]?.session_time || ""}
+                          onChange={(e) =>
+                            setRescheduleData({
+                              ...rescheduleData,
+                              [booking.booking_id]: {
+                                ...rescheduleData[booking.booking_id],
+                                session_time: e.target.value,
+                              },
+                            })
+                          }
+                        />
+                        <button
+                          className="btn btn-info"
+                          onClick={() => handleReschedule(booking.booking_id)}
+                        >
+                          Reschedule
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           ))}
         </div>

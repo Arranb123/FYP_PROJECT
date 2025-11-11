@@ -44,48 +44,50 @@ function AdminDashboard() {
   };
 
   return (
-    <div style={{ width: "80%", margin: "40px auto", textAlign: "center" }}>
-      <h1>Admin Dashboard — Tutor Verification</h1>
+    <div className="container">
+      <h1 className="mb-4">Admin Dashboard — Tutor Verification</h1>
       {tutors.length === 0 ? (
-        <p>No unverified tutors found.</p>
+        <div className="alert alert-info">No unverified tutors found.</div>
       ) : (
-        <table border="1" style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ backgroundColor: "#f2f2f2" }}>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Modules</th>
-              <th>Hourly Rate (€)</th>
-              <th>Proof Document</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tutors.map((tutor) => (
-              <tr key={tutor.tutor_id}>
-                <td>{tutor.first_name} {tutor.last_name}</td>
-                <td>{tutor.college_email}</td>
-                <td>{tutor.modules}</td>
-                <td>{tutor.hourly_rate}</td>
-                <td>{tutor.proof_doc || "No document"}</td>
-                <td>
-                  <button
-                    onClick={() => handleApprove(tutor.tutor_id)}
-                    style={{ backgroundColor: "green", color: "white", marginRight: "10px" }}
-                  >
-                    Approve
-                  </button>
-                  <button
-                    onClick={() => handleReject(tutor.tutor_id)}
-                    style={{ backgroundColor: "red", color: "white" }}
-                  >
-                    Reject
-                  </button>
-                </td>
+        <div className="table-responsive">
+          <table className="table table-striped table-hover">
+            <thead className="table-dark">
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Modules</th>
+                <th>Hourly Rate (€)</th>
+                <th>Proof Document</th>
+                <th>Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {tutors.map((tutor) => (
+                <tr key={tutor.tutor_id}>
+                  <td>{tutor.first_name} {tutor.last_name}</td>
+                  <td>{tutor.college_email}</td>
+                  <td>{tutor.modules}</td>
+                  <td>€{tutor.hourly_rate}</td>
+                  <td>{tutor.proof_doc || "No document"}</td>
+                  <td>
+                    <button
+                      className="btn btn-success btn-sm me-2"
+                      onClick={() => handleApprove(tutor.tutor_id)}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      className="btn btn-danger btn-sm"
+                      onClick={() => handleReject(tutor.tutor_id)}
+                    >
+                      Reject
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

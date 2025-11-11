@@ -45,87 +45,90 @@ const TutorSignup = () => {
   };
 
   return (
-    <div style={{ width: "80%", margin: "30px auto", textAlign: "center" }}>
-      <h2>Tutor Sign-Up</h2>
+    <div className="container">
+      <div className="row justify-content-center">
+        <div className="col-md-8 col-lg-6">
+          <h2 className="mb-4 text-center">Tutor Sign-Up</h2>
 
-      <form
-        onSubmit={handleSubmit}
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          maxWidth: "500px",
-          margin: "0 auto",
-          gap: "10px",
-        }}
-      >
-        <input
-          type="text"
-          name="first_name"
-          placeholder="First Name"
-          value={formData.first_name}
-          onChange={handleChange}
-          required
-        />
-        <input
-          type="text"
-          name="last_name"
-          placeholder="Last Name"
-          value={formData.last_name}
-          onChange={handleChange}
-          required
-        />
-        <input
-          type="email"
-          name="college_email"
-          placeholder="College Email"
-          value={formData.college_email}
-          onChange={handleChange}
-          required
-        />
-        <input
-          type="text"
-          name="modules"
-          placeholder="Modules (comma-separated)"
-          value={formData.modules}
-          onChange={handleChange}
-          required
-        />
-        <input
-          type="number"
-          name="hourly_rate"
-          placeholder="Hourly Rate (€)"
-          value={formData.hourly_rate}
-          onChange={handleChange}
-          required
-        />
-        <textarea
-          name="bio"
-          placeholder="Short Bio"
-          value={formData.bio}
-          onChange={handleChange}
-          rows="4"
-        />
+          <form onSubmit={handleSubmit}>
+            <div className="mb-3">
+              <input
+                type="text"
+                className="form-control"
+                name="first_name"
+                placeholder="First Name"
+                value={formData.first_name}
+                onChange={handleChange}
+                required
+              />
+            </div>
+            <div className="mb-3">
+              <input
+                type="text"
+                className="form-control"
+                name="last_name"
+                placeholder="Last Name"
+                value={formData.last_name}
+                onChange={handleChange}
+                required
+              />
+            </div>
+            <div className="mb-3">
+              <input
+                type="email"
+                className="form-control"
+                name="college_email"
+                placeholder="College Email"
+                value={formData.college_email}
+                onChange={handleChange}
+                required
+              />
+            </div>
+            <div className="mb-3">
+              <input
+                type="text"
+                className="form-control"
+                name="modules"
+                placeholder="Modules (comma-separated)"
+                value={formData.modules}
+                onChange={handleChange}
+                required
+              />
+            </div>
+            <div className="mb-3">
+              <input
+                type="number"
+                className="form-control"
+                name="hourly_rate"
+                placeholder="Hourly Rate (€)"
+                value={formData.hourly_rate}
+                onChange={handleChange}
+                required
+              />
+            </div>
+            <div className="mb-3">
+              <textarea
+                className="form-control"
+                name="bio"
+                placeholder="Short Bio"
+                value={formData.bio}
+                onChange={handleChange}
+                rows="4"
+              />
+            </div>
 
-        <button
-          type="submit"
-          style={{
-            backgroundColor: "#007bff",
-            color: "white",
-            padding: "10px 20px",
-            border: "none",
-            borderRadius: "5px",
-            cursor: "pointer",
-          }}
-        >
-          Register
-        </button>
-      </form>
+            <button type="submit" className="btn btn-primary w-100">
+              Register as Tutor
+            </button>
+          </form>
 
-      {message && (
-        <p style={{ color: message.includes("successfully") ? "green" : "red" }}>
-          {message}
-        </p>
-      )}
+          {message && (
+            <div className={`alert mt-3 ${message.includes("successfully") ? "alert-success" : "alert-danger"}`}>
+              {message}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
