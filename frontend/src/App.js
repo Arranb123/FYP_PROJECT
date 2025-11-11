@@ -23,7 +23,7 @@ function App() {
   });
   const [editId, setEditId] = useState(null);
 
-  const API_URL = "http://localhost:5000/students"; // Flask backend API URL
+  const API_URL = "http://127.0.0.1:5000/students"; // Flask backend API URL
 
   // Fetch all students on load
   useEffect(() => {
@@ -103,7 +103,7 @@ function App() {
       {/* ✅ Navigation buttons */}
       <nav className="navbar navbar-expand-lg navbar-light bg-light mb-4 rounded">
         <div className="container-fluid">
-          <a className="navbar-brand fw-bold" href="#!">StudyHive</a>
+          <span className="navbar-brand fw-bold">StudyHive</span>
           <div className="navbar-nav">
             {["students", "tutors", "signup", "admin", "learner-bookings", "tutor-bookings"].map((page) => (
               <button

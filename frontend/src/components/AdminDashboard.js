@@ -24,10 +24,10 @@ function AdminDashboard() {
   const handleApprove = async (id) => {
     try {
       await axios.put(`http://127.0.0.1:5000/api/tutors/${id}/verify`);
-      alert("Tutor approved!");
       fetchTutors();
     } catch (error) {
       console.error("Error approving tutor:", error);
+      alert("Error approving tutor. Please try again.");
     }
   };
 
@@ -36,10 +36,10 @@ function AdminDashboard() {
     if (!window.confirm("Are you sure you want to reject this tutor?")) return;
     try {
       await axios.delete(`http://127.0.0.1:5000/api/tutors/${id}`);
-      alert("Tutor rejected and removed!");
       fetchTutors();
     } catch (error) {
       console.error("Error rejecting tutor:", error);
+      alert("Error rejecting tutor. Please try again.");
     }
   };
 

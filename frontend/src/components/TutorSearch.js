@@ -19,7 +19,7 @@ const TutorSearch = () => {
 
   const fetchStudents = async () => {
     try {
-      const res = await axios.get("http://localhost:5000/students");
+      const res = await axios.get("http://127.0.0.1:5000/students");
       setStudents(res.data);
       if (res.data.length > 0) {
         setSelectedLearnerId(res.data[0].id.toString());
@@ -63,6 +63,7 @@ const TutorSearch = () => {
   const handleBookingSuccess = () => {
     setShowBookingForm(false);
     setSelectedTutor(null);
+    // Optionally refresh tutor list or show success message
   };
 
   return (
@@ -93,6 +94,11 @@ const TutorSearch = () => {
           className="form-control"
           value={module}
           onChange={(e) => setModule(e.target.value)}
+          onKeyPress={(e) => {
+            if (e.key === 'Enter') {
+              handleSearch();
+            }
+          }}
           placeholder="Enter module name (e.g. Accounting)"
         />
         <button

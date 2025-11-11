@@ -36,6 +36,12 @@ const BookingForm = ({ tutor, learnerId, onClose, onSuccess }) => {
 
       if (response.status === 201) {
         setMessage("Booking created successfully!");
+        // Reset form
+        setFormData({
+          session_date: "",
+          session_time: "",
+          duration: 60,
+        });
         setTimeout(() => {
           onSuccess && onSuccess();
           onClose();
@@ -50,13 +56,15 @@ const BookingForm = ({ tutor, learnerId, onClose, onSuccess }) => {
   };
 
   return (
-    <div className="modal show d-block" style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }} tabIndex="-1">
-      <div className="modal-dialog modal-dialog-centered">
-        <div className="modal-content">
-          <div className="modal-header">
-            <h5 className="modal-title">Book Session with {tutor.first_name} {tutor.last_name}</h5>
-            <button type="button" className="btn-close" onClick={onClose}></button>
-          </div>
+    <>
+      <div className="modal-backdrop show" onClick={onClose}></div>
+      <div className="modal show d-block" style={{ zIndex: 1050 }} tabIndex="-1" role="dialog" onClick={onClose}>
+        <div className="modal-dialog modal-dialog-centered" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content">
+            <div className="modal-header">
+              <h5 className="modal-title">Book Session with {tutor.first_name} {tutor.last_name}</h5>
+              <button type="button" className="btn-close" onClick={onClose} aria-label="Close"></button>
+            </div>
           <div className="modal-body">
             <p><strong>Modules:</strong> {tutor.modules}</p>
             <p><strong>Hourly Rate:</strong> €{tutor.hourly_rate}</p>
@@ -120,7 +128,7 @@ const BookingForm = ({ tutor, learnerId, onClose, onSuccess }) => {
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 

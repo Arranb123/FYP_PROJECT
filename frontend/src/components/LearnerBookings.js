@@ -32,7 +32,6 @@ const LearnerBookings = ({ learnerId }) => {
 
     try {
       await axios.put(`http://127.0.0.1:5000/api/bookings/${bookingId}/cancel`);
-      alert("Booking cancelled successfully!");
       fetchBookings();
     } catch (err) {
       alert("Error cancelling booking. Please try again.");
@@ -52,7 +51,6 @@ const LearnerBookings = ({ learnerId }) => {
         session_date: data.session_date,
         session_time: data.session_time,
       });
-      alert("Booking rescheduled successfully!");
       setRescheduleData({});
       fetchBookings();
     } catch (err) {
