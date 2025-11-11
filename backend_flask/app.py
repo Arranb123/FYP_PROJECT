@@ -15,70 +15,113 @@ def get_db_connection():
 
 # DATABASE INITIALIZATION AND MIGRATIONS
 def init_database():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    # Create students table if it doesn't exist
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS students (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        first_name TEXT,
-        last_name TEXT,
-        college_email TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    """)
-    
-    # Add timestamps to students table if they don't exist (for existing tables)
-    # SQLite doesn't support DEFAULT CURRENT_TIMESTAMP in ALTER TABLE, so we add without default
     try:
-        cursor.execute("ALTER TABLE students ADD COLUMN created_at TIMESTAMP")
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Create students table if it doesn't exist
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS students (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            first_name TEXT,
+            last_name TEXT,
+            college_email TEXT,
+            created_at TIMESTAMP,
+            updated_at TIMESTAMP
+        );
+        """)
+        
+        # Add timestamps to students table if they don't exist (for existing tables)
+        # SQLite doesn't support DEFAULT CURRENT_TIMESTAMP in ALTER TABLE, so we add without default
+        try:
+            cursor.execute("ALTER TABLE students ADD COLUMN created_at TIMESTAMP")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        
+        try:
+            cursor.execute("ALTER TABLE students ADD COLUMN updated_at TIMESTAMP")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        
+        # Create tutors table if it doesn't exist (with timestamps)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS tutors (
+            tutor_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            first_name TEXT NOT NULL,
+            last_name TEXT NOT NULL,
+            college_email TEXT UNIQUE NOT NULL,
+            modules TEXT NOT NULL,
+            hourly_rate REAL NOT NULL,
+            rating REAL DEFAULT 0,
+            bio TEXT,
+            profile_pic TEXT,
+            verified INTEGER DEFAULT 0,
+            proof_doc TEXT,
+            created_at TIMESTAMP,
+            updated_at TIMESTAMP
+        );
+        """)
+        
+        # Add timestamps to tutors table if they don't exist (for existing tables)
+        try:
+            cursor.execute("ALTER TABLE tutors ADD COLUMN created_at TIMESTAMP")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        
+        try:
+            cursor.execute("ALTER TABLE tutors ADD COLUMN updated_at TIMESTAMP")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        
+        # Create bookings table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS bookings (
+            booking_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            learner_id INTEGER NOT NULL,
+            tutor_id INTEGER NOT NULL,
+            session_date DATE NOT NULL,
+            session_time TIME NOT NULL,
+            duration INTEGER NOT NULL DEFAULT 60,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TIMESTAMP,
+            updated_at TIMESTAMP,
+            FOREIGN KEY (learner_id) REFERENCES students(id),
+            FOREIGN KEY (tutor_id) REFERENCES tutors(tutor_id)
+        );
+        """)
+        
         conn.commit()
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-    
-    try:
-        cursor.execute("ALTER TABLE students ADD COLUMN updated_at TIMESTAMP")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-    
-    # Add timestamps to tutors table if they don't exist
-    try:
-        cursor.execute("ALTER TABLE tutors ADD COLUMN created_at TIMESTAMP")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-    
-    try:
-        cursor.execute("ALTER TABLE tutors ADD COLUMN updated_at TIMESTAMP")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-    
-    # Create bookings table
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS bookings (
-        booking_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        learner_id INTEGER NOT NULL,
-        tutor_id INTEGER NOT NULL,
-        session_date DATE NOT NULL,
-        session_time TIME NOT NULL,
-        duration INTEGER NOT NULL DEFAULT 60,
-        status TEXT NOT NULL DEFAULT 'pending',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (learner_id) REFERENCES students(id),
-        FOREIGN KEY (tutor_id) REFERENCES tutors(tutor_id)
-    );
-    """)
-    
-    conn.commit()
-    conn.close()
+        conn.close()
+    except sqlite3.DatabaseError as e:
+        print(f"Database error during initialization: {e}")
+        print("Attempting to recover...")
+        # Try to close any open connections
+        try:
+            conn.close()
+        except:
+            pass
+        raise
+    except Exception as e:
+        print(f"Unexpected error during database initialization: {e}")
+        raise
 
 # Initialize database on startup
-init_database()
+try:
+    init_database()
+    print("Database initialized successfully")
+except sqlite3.DatabaseError as e:
+    print(f"CRITICAL: Database is corrupted. Error: {e}")
+    print("SOLUTION: Delete the file 'fyp_tutoring.db' and restart the server.")
+    print("The database will be recreated automatically with the correct schema.")
+    print("Note: All existing data will be lost.")
+    # Don't raise - let the app start so user can see the error message
+except Exception as e:
+    print(f"Error initializing database: {e}")
+    raise
 
 
 #   STUDENT CRUD ROUTES  
@@ -175,27 +218,7 @@ def delete_student(id):
 
 
 #   TUTOR ROUTES  
-
-
-# CREATE TABLE (only needed once)
-conn = sqlite3.connect('fyp_tutoring.db')
-conn.execute("""
-CREATE TABLE IF NOT EXISTS tutors (
-    tutor_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    first_name TEXT NOT NULL,
-    last_name TEXT NOT NULL,
-    college_email TEXT UNIQUE NOT NULL,
-    modules TEXT NOT NULL,
-    hourly_rate REAL NOT NULL,
-    rating REAL DEFAULT 0,
-    bio TEXT,
-    profile_pic TEXT,
-    verified INTEGER DEFAULT 0,
-    proof_doc TEXT
-);
-""")
-conn.commit()
-conn.close()
+# Note: Tutors table is now created in init_database() function above
 
 
 # ADD A NEW TUTOR (Signup)
