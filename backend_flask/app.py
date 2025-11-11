@@ -82,22 +82,31 @@ def get_students():
 @app.route('/students', methods=['POST'])
 def add_student():
     data = request.get_json()
-    first_name = data.get('first_name')
-    last_name = data.get('last_name')
-    college_email = data.get('college_email')
+    first_name = data.get('first_name', '').strip()
+    last_name = data.get('last_name', '').strip()
+    college_email = data.get('college_email', '').strip()
 
     if not all([first_name, last_name, college_email]):
-        return jsonify({"error": "Missing required fields"}), 400
+        return jsonify({"error": "Missing required fields: first_name, last_name, and college_email are required"}), 400
+    
+    # Basic email validation
+    if '@' not in college_email:
+        return jsonify({"error": "Invalid email format"}), 400
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        "INSERT INTO students (first_name, last_name, college_email, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-        (first_name, last_name, college_email, datetime.now(), datetime.now())
-    )
-    conn.commit()
-    conn.close()
-    return jsonify({"message": "Student added successfully"}), 201
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO students (first_name, last_name, college_email, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+            (first_name, last_name, college_email, datetime.now(), datetime.now())
+        )
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "Student added successfully"}), 201
+    except sqlite3.IntegrityError:
+        return jsonify({"error": "Email already exists"}), 400
+    except sqlite3.Error as e:
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
 
 
 @app.route('/students/<int:id>', methods=['PUT'])
@@ -155,19 +164,28 @@ conn.close()
 @app.route('/api/tutors', methods=['POST'])
 def add_tutor():
     data = request.get_json()
-    first_name = data.get('first_name')
-    last_name = data.get('last_name')
-    college_email = data.get('college_email')
-    modules = data.get('modules')
+    first_name = data.get('first_name', '').strip()
+    last_name = data.get('last_name', '').strip()
+    college_email = data.get('college_email', '').strip()
+    modules = data.get('modules', '').strip()
     hourly_rate = data.get('hourly_rate')
     rating = 0  # Ratings should come from learner reviews, not self-assigned
-    bio = data.get('bio', '')
-    profile_pic = data.get('profile_pic', '')
+    bio = data.get('bio', '').strip()
+    profile_pic = data.get('profile_pic', '').strip()
     verified = data.get('verified', 0)
-    proof_doc = data.get('proof_doc', '')
+    proof_doc = data.get('proof_doc', '').strip()
 
-    if not all([first_name, last_name, college_email, modules, hourly_rate]):
-        return jsonify({"error": "Missing required fields"}), 400
+    # Validate required fields
+    if not all([first_name, last_name, college_email, modules]):
+        return jsonify({"error": "Missing required fields: first_name, last_name, college_email, and modules are required"}), 400
+    
+    # Validate hourly_rate
+    try:
+        hourly_rate = float(hourly_rate)
+        if hourly_rate <= 0:
+            return jsonify({"error": "Hourly rate must be greater than 0"}), 400
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid hourly rate. Please enter a valid number"}), 400
 
     try:
         conn = get_db_connection()

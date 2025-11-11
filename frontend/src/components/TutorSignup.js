@@ -22,13 +22,17 @@ const TutorSignup = () => {
     setMessage("");
 
     try {
-      const response = await axios.post("http://127.0.0.1:5000/api/tutors", {
+      // Convert hourly_rate to number
+      const tutorData = {
         ...formData,
+        hourly_rate: parseFloat(formData.hourly_rate),
         verified: 0, // tutors start unverified
-      });
+      };
+
+      const response = await axios.post("http://127.0.0.1:5000/api/tutors", tutorData);
 
       if (response.status === 201) {
-        setMessage("Tutor registered successfully!");
+        setMessage("Tutor registered successfully! Waiting for admin approval.");
         setFormData({
           first_name: "",
           last_name: "",
@@ -40,7 +44,8 @@ const TutorSignup = () => {
       }
     } catch (error) {
       console.error("Error adding tutor:", error);
-      setMessage("Error registering tutor. Please try again.");
+      const errorMessage = error.response?.data?.error || "Error registering tutor. Please try again.";
+      setMessage(errorMessage);
     }
   };
 

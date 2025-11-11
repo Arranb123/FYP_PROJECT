@@ -22,6 +22,7 @@ function App() {
     college_email: "",
   });
   const [editId, setEditId] = useState(null);
+  const [message, setMessage] = useState("");
 
   const API_URL = "http://127.0.0.1:5000/students"; // Flask backend API URL
 
@@ -43,16 +44,18 @@ function App() {
   // Add or update a student
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setMessage("");
 
     if (!formData.first_name || !formData.last_name || !formData.college_email) {
-      alert("Please fill out all fields");
+      setMessage("Please fill out all fields");
       return;
     }
 
     try {
+      let response;
       if (editId) {
         // UPDATE existing student
-        await fetch(`${API_URL}/${editId}`, {
+        response = await fetch(`${API_URL}/${editId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(formData),
@@ -60,18 +63,27 @@ function App() {
         setEditId(null);
       } else {
         // ADD new student
-        await fetch(API_URL, {
+        response = await fetch(API_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(formData),
         });
       }
 
-      // Clear form and reload
-      setFormData({ first_name: "", last_name: "", college_email: "" });
-      fetchStudents();
+      const data = await response.json();
+
+      if (response.ok) {
+        // Clear form and reload
+        setFormData({ first_name: "", last_name: "", college_email: "" });
+        setMessage("Student saved successfully!");
+        fetchStudents();
+        setTimeout(() => setMessage(""), 3000);
+      } else {
+        setMessage(data.error || "Error saving student. Please try again.");
+      }
     } catch (error) {
       console.error("Error saving student:", error);
+      setMessage("Error saving student. Please try again.");
     }
   };
 
@@ -175,6 +187,12 @@ function App() {
               {editId ? "Update Student" : "Add Student"}
             </button>
           </form>
+
+          {message && (
+            <div className={`alert mt-3 ${message.includes("successfully") ? "alert-success" : "alert-danger"}`}>
+              {message}
+            </div>
+          )}
 
           <h2 className="mb-3">Saved Students</h2>
           <div className="table-responsive">
