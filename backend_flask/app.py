@@ -18,25 +18,42 @@ def init_database():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Add timestamps to students table if they don't exist
+    # Create students table if it doesn't exist
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS students (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        first_name TEXT,
+        last_name TEXT,
+        college_email TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+    
+    # Add timestamps to students table if they don't exist (for existing tables)
+    # SQLite doesn't support DEFAULT CURRENT_TIMESTAMP in ALTER TABLE, so we add without default
     try:
-        cursor.execute("ALTER TABLE students ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        cursor.execute("ALTER TABLE students ADD COLUMN created_at TIMESTAMP")
+        conn.commit()
     except sqlite3.OperationalError:
         pass  # Column already exists
     
     try:
-        cursor.execute("ALTER TABLE students ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        cursor.execute("ALTER TABLE students ADD COLUMN updated_at TIMESTAMP")
+        conn.commit()
     except sqlite3.OperationalError:
         pass  # Column already exists
     
     # Add timestamps to tutors table if they don't exist
     try:
-        cursor.execute("ALTER TABLE tutors ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        cursor.execute("ALTER TABLE tutors ADD COLUMN created_at TIMESTAMP")
+        conn.commit()
     except sqlite3.OperationalError:
         pass  # Column already exists
     
     try:
-        cursor.execute("ALTER TABLE tutors ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        cursor.execute("ALTER TABLE tutors ADD COLUMN updated_at TIMESTAMP")
+        conn.commit()
     except sqlite3.OperationalError:
         pass  # Column already exists
     
