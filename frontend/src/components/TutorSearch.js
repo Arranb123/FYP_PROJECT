@@ -1,11 +1,33 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import axios from "axios";
+import BookingForm from "./BookingForm";
 
 const TutorSearch = () => {
   const [module, setModule] = useState("");
   const [tutors, setTutors] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [students, setStudents] = useState([]);
+  const [selectedLearnerId, setSelectedLearnerId] = useState("");
+  const [selectedTutor, setSelectedTutor] = useState(null);
+  const [showBookingForm, setShowBookingForm] = useState(false);
+
+  // Fetch students for learner selection
+  useEffect(() => {
+    fetchStudents();
+  }, []);
+
+  const fetchStudents = async () => {
+    try {
+      const res = await axios.get("http://127.0.0.1:5000/students");
+      setStudents(res.data);
+      if (res.data.length > 0) {
+        setSelectedLearnerId(res.data[0].id.toString());
+      }
+    } catch (error) {
+      console.error("Error fetching students:", error);
+    }
+  };
 
   const handleSearch = async () => {
     if (!module.trim()) {
@@ -29,62 +51,101 @@ const TutorSearch = () => {
     setLoading(false);
   };
 
-  return (
-    <div style={{ padding: "30px", maxWidth: "800px", margin: "0 auto" }}>
-      <h2>🔍 Search Tutors by Module</h2>
+  const handleBookSession = (tutor) => {
+    if (!selectedLearnerId) {
+      setError("Please select a learner first");
+      return;
+    }
+    setSelectedTutor(tutor);
+    setShowBookingForm(true);
+  };
 
-      <div style={{ display: "flex", marginBottom: "20px" }}>
+  const handleBookingSuccess = () => {
+    setShowBookingForm(false);
+    setSelectedTutor(null);
+    // Optionally refresh tutor list or show success message
+  };
+
+  return (
+    <div className="container">
+      <h2 className="mb-4">🔍 Search Tutors by Module</h2>
+
+      {/* Learner Selection */}
+      <div className="card mb-4">
+        <div className="card-body">
+          <label className="form-label fw-bold">Select Learner:</label>
+          <select
+            className="form-select"
+            value={selectedLearnerId}
+            onChange={(e) => setSelectedLearnerId(e.target.value)}
+          >
+            {students.map((student) => (
+              <option key={student.id} value={student.id}>
+                {student.first_name} {student.last_name} ({student.college_email})
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="input-group mb-4">
         <input
           type="text"
+          className="form-control"
           value={module}
           onChange={(e) => setModule(e.target.value)}
-          placeholder="Enter module name (e.g. Accounting)"
-          style={{
-            flex: 1,
-            padding: "10px",
-            border: "1px solid #ccc",
-            borderRadius: "5px",
-            marginRight: "10px"
+          onKeyPress={(e) => {
+            if (e.key === 'Enter') {
+              handleSearch();
+            }
           }}
+          placeholder="Enter module name (e.g. Accounting)"
         />
         <button
+          className="btn btn-primary"
           onClick={handleSearch}
-          style={{
-            backgroundColor: "#007bff",
-            color: "white",
-            border: "none",
-            padding: "10px 20px",
-            borderRadius: "5px",
-            cursor: "pointer"
-          }}
+          type="button"
         >
           Search
         </button>
       </div>
 
-      {loading && <p>Loading tutors...</p>}
-      {error && <p style={{ color: "red" }}>{error}</p>}
+      {loading && <div className="alert alert-info">Loading tutors...</div>}
+      {error && <div className="alert alert-danger">{error}</div>}
 
-      <div>
+      <div className="row g-3">
         {tutors.map((tutor) => (
-          <div
-            key={tutor.tutor_id}
-            style={{
-              border: "1px solid #ddd",
-              borderRadius: "10px",
-              padding: "15px",
-              marginBottom: "15px",
-              backgroundColor: "#f9f9f9"
-            }}
-          >
-            <h3>{tutor.first_name} {tutor.last_name}</h3>
-            <p><strong>Modules:</strong> {tutor.modules}</p>
-            <p><strong>Hourly Rate:</strong> €{tutor.hourly_rate}</p>
-            <p><strong>Rating:</strong> {tutor.rating || "N/A"}</p>
-            <p>{tutor.bio}</p>
+          <div key={tutor.tutor_id} className="col-md-6">
+            <div className="card h-100">
+              <div className="card-body">
+                <h5 className="card-title">{tutor.first_name} {tutor.last_name}</h5>
+                <p className="card-text"><strong>Modules:</strong> {tutor.modules}</p>
+                <p className="card-text"><strong>Hourly Rate:</strong> €{tutor.hourly_rate}</p>
+                <p className="card-text"><strong>Rating:</strong> {tutor.rating || "N/A"}</p>
+                <p className="card-text">{tutor.bio}</p>
+                <button
+                  className="btn btn-success"
+                  onClick={() => handleBookSession(tutor)}
+                >
+                  Book Session
+                </button>
+              </div>
+            </div>
           </div>
         ))}
       </div>
+
+      {showBookingForm && selectedTutor && (
+        <BookingForm
+          tutor={selectedTutor}
+          learnerId={parseInt(selectedLearnerId)}
+          onClose={() => {
+            setShowBookingForm(false);
+            setSelectedTutor(null);
+          }}
+          onSuccess={handleBookingSuccess}
+        />
+      )}
     </div>
   );
 };
