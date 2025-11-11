@@ -8,7 +8,6 @@ const TutorSignup = () => {
     college_email: "",
     modules: "",
     hourly_rate: "",
-    rating: "",
     bio: "",
   });
 
@@ -36,7 +35,6 @@ const TutorSignup = () => {
           college_email: "",
           modules: "",
           hourly_rate: "",
-          rating: "",
           bio: "",
         });
       }
@@ -99,14 +97,6 @@ const TutorSignup = () => {
           value={formData.hourly_rate}
           onChange={handleChange}
           required
-        />
-        <input
-          type="number"
-          step="0.1"
-          name="rating"
-          placeholder="Initial Rating (optional)"
-          value={formData.rating}
-          onChange={handleChange}
         />
         <textarea
           name="bio"

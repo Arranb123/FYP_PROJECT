@@ -3,10 +3,14 @@ import React, { useEffect, useState } from "react";
 import TutorSearch from "./components/TutorSearch"; // ✅ Tutor Search component
 import TutorSignup from "./components/TutorSignup"; // ✅ Tutor Signup component
 import AdminDashboard from "./components/AdminDashboard"; // ✅ Admin Dashboard component
+import TutorBookings from "./components/TutorBookings"; // ✅ Tutor Bookings component
+import LearnerBookings from "./components/LearnerBookings"; // ✅ Learner Bookings component
 
 function App() {
   // ✅ Controls which page is shown
   const [currentPage, setCurrentPage] = useState("students");
+  const [selectedTutorId, setSelectedTutorId] = useState(null);
+  const [selectedLearnerId, setSelectedLearnerId] = useState(null);
 
   // ------------------------------
   // STUDENT SYSTEM STATE + LOGIC
@@ -98,7 +102,7 @@ function App() {
     <div style={{ width: "85%", margin: "40px auto", textAlign: "center" }}>
       {/* ✅ Navigation buttons */}
       <div style={{ marginBottom: "30px" }}>
-        {["students", "tutors", "signup", "admin"].map((page) => (
+        {["students", "tutors", "signup", "admin", "learner-bookings", "tutor-bookings"].map((page) => (
           <button
             key={page}
             onClick={() => setCurrentPage(page)}
@@ -118,7 +122,11 @@ function App() {
               ? "Tutor Search"
               : page === "signup"
               ? "Tutor Signup"
-              : "Admin"}
+              : page === "admin"
+              ? "Admin"
+              : page === "learner-bookings"
+              ? "My Bookings"
+              : "Tutor Bookings"}
           </button>
         ))}
       </div>
@@ -209,6 +217,45 @@ function App() {
 
       {/* ✅ Admin Dashboard Page */}
       {currentPage === "admin" && <AdminDashboard />}
+
+      {/* ✅ Learner Bookings Page */}
+      {currentPage === "learner-bookings" && (
+        <div>
+          <h2>Select a Learner to View Bookings</h2>
+          <select
+            value={selectedLearnerId || ""}
+            onChange={(e) => setSelectedLearnerId(parseInt(e.target.value))}
+            style={{ padding: "10px", marginBottom: "20px", minWidth: "300px" }}
+          >
+            <option value="">-- Select Learner --</option>
+            {students.map((student) => (
+              <option key={student.id} value={student.id}>
+                {student.first_name} {student.last_name} ({student.college_email})
+              </option>
+            ))}
+          </select>
+          {selectedLearnerId && <LearnerBookings learnerId={selectedLearnerId} />}
+        </div>
+      )}
+
+      {/* ✅ Tutor Bookings Page */}
+      {currentPage === "tutor-bookings" && (
+        <div>
+          <h2>Select a Tutor to View Bookings</h2>
+          <p style={{ color: "#666" }}>Note: In a full implementation, tutors would log in and see their own bookings automatically.</p>
+          <select
+            value={selectedTutorId || ""}
+            onChange={(e) => setSelectedTutorId(parseInt(e.target.value))}
+            style={{ padding: "10px", marginBottom: "20px", minWidth: "300px" }}
+          >
+            <option value="">-- Select Tutor --</option>
+            {/* You would fetch verified tutors here - for now using a placeholder */}
+            <option value="1">Tutor ID 1</option>
+            <option value="2">Tutor ID 2</option>
+          </select>
+          {selectedTutorId && <TutorBookings tutorId={selectedTutorId} />}
+        </div>
+      )}
     </div>
   );
 }
