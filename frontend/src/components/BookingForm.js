@@ -128,6 +128,7 @@ const BookingForm = ({ tutor, learnerId, onClose, onSuccess }) => {
           </div>
         </div>
       </div>
+    </div>
     </>
   );
 };
