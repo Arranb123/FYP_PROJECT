@@ -1,38 +1,308 @@
-.App {
-  text-align: center;
+/* 
+/need to comment on everything i do here
+
+
+   GLOBAL STYLES & THEME IMPROVEMENTS
+    */
+
+/* UI Improvement: Modern color scheme with better contrast and visual hierarchy */
+:root {
+  --primary-color: #4f46e5; /* Indigo - more modern than default blue */
+  --primary-hover: #4338ca;
+  --success-color: #10b981; /* Green for success states */
+  --danger-color: #ef4444; /* Red for errors/danger */
+  --warning-color: #f59e0b; /* Amber for warnings */
+  --info-color: #3b82f6; /* Blue for info */
+  --light-bg: #f8fafc; /* Light gray background */
+  --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); /* Subtle shadow for depth */
+  --card-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.15); /* Enhanced shadow on hover */
+  --border-radius: 8px; /* Consistent rounded corners */
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+/* UI Improvement: Better body styling with smooth font rendering */
+body {
+  background-color: var(--light-bg);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
+/* UI Improvement: Enhanced container spacing for better breathing room */
+.container-fluid {
+  padding-left: 2rem;
+  padding-right: 2rem;
 }
 
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
+/* UI Improvement: Better card styling with shadows and hover effects */
+.card {
+  border: none;
+  border-radius: var(--border-radius);
+  box-shadow: var(--card-shadow);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  margin-bottom: 1.5rem;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--card-shadow-hover);
+}
+
+/* UI Improvement: Enhanced button styling with better hover states */
+.btn {
+  border-radius: var(--border-radius);
+  font-weight: 500;
+  transition: all 0.2s ease;
+  padding: 0.5rem 1.25rem;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.btn-primary {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
+/* Navigation buttons - light blue styling */
+.btn-nav {
+  background-color: #e0f2ff;
+  border: 1px solid #b6d9ff;
+  color: #0b3d91;
+}
+
+.btn-nav:hover {
+  background-color: #cde6ff;
+  border-color: #9ecaff;
+  color: #082d6c;
+}
+
+.btn-nav.btn-nav-active,
+.btn-nav-active {
+  background-color: #9dd1ff;
+  border-color: #5aa5f7;
+  color: #03234a;
+  box-shadow: 0 2px 6px rgba(90, 165, 247, 0.4);
+}
+
+/* UI Improvement: Better form input styling with focus states */
+.form-control,
+.form-select {
+  border-radius: var(--border-radius);
+  border: 1px solid #d1d5db;
+  padding: 0.625rem 0.875rem;
+  transition: all 0.2s ease;
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+  outline: none;
+}
+
+/* UI Improvement: Enhanced table styling with better readability */
+.table {
+  background-color: white;
+  border-radius: var(--border-radius);
+  overflow: hidden;
+}
+
+.table thead th {
+  background-color: #1f2937;
   color: white;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.875rem;
+  letter-spacing: 0.5px;
+  padding: 1rem;
 }
 
-.App-link {
-  color: #61dafb;
+.table tbody tr {
+  transition: background-color 0.15s ease;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
+.table tbody tr:hover {
+  background-color: #f3f4f6;
+}
+
+/* UI Improvement: Better badge styling with consistent colors */
+.badge {
+  padding: 0.375rem 0.75rem;
+  font-weight: 500;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  text-transform: capitalize;
+}
+
+/* UI Improvement: Enhanced alert styling with better spacing */
+.alert {
+  border-radius: var(--border-radius);
+  border: none;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+
+/* UI Improvement: Better modal backdrop and styling */
+.modal-backdrop {
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+}
+
+.modal-content {
+  border-radius: var(--border-radius);
+  border: none;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+/* UI Improvement: Enhanced navbar styling */
+.navbar {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 1rem 0;
+}
+
+.navbar-brand {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--primary-color) !important;
+  transition: opacity 0.2s ease;
+}
+
+.navbar-brand:hover {
+  opacity: 0.8;
+}
+
+/* 
+   LOGO STYLING - Enhanced appearance
+    */
+
+/* Logo styling for consistent appearance across all locations */
+img[alt="StudyHive Logo"] {
+  user-select: none;
+  -webkit-user-drag: none;
+  /* Smooth image rendering */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  /* Prevent image distortion */
+  max-width: 100%;
+  height: auto;
+  /* Smooth transitions */
+  transition: all 0.3s ease;
+}
+
+/* Navbar logo - larger and more prominent */
+.navbar-brand img[alt="StudyHive Logo"] {
+  height: 65px !important;
+  max-height: 65px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+  transition: transform 0.3s ease, filter 0.3s ease;
+}
+
+/* Hover effect on navbar logo */
+.navbar-brand:hover img[alt="StudyHive Logo"] {
+  transform: scale(1.05);
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15));
+}
+
+/* Page header logos - centered and prominent */
+.text-center img[alt="StudyHive Logo"] {
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.1));
+  margin-bottom: 1rem;
+}
+
+/* Footer logo - subtle but visible */
+footer img[alt="StudyHive Logo"] {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.08));
+  opacity: 0.9;
+  transition: opacity 0.3s ease;
+}
+
+footer img[alt="StudyHive Logo"]:hover {
+  opacity: 1;
+}
+
+/* Modal header logo - white/inverted version for visibility on blue background */
+.logo-modal,
+.modal-header img[alt="StudyHive Logo"] {
+  filter: brightness(0) invert(1) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+  transition: transform 0.3s ease;
+}
+
+.logo-modal:hover {
+  transform: scale(1.05);
+}
+
+/* Specific logo classes for different contexts */
+.logo-navbar {
+  height: 65px;
+  max-height: 65px;
+  margin-right: 12px;
+  object-fit: contain;
+}
+
+.logo-page-header {
+  height: 80px;
+  max-height: 80px;
+  object-fit: contain;
+}
+
+.logo-footer {
+  height: 55px;
+  max-height: 55px;
+  object-fit: contain;
+}
+
+/* Responsive logo sizing for mobile */
+@media (max-width: 768px) {
+  .navbar-brand img[alt="StudyHive Logo"] {
+    height: 50px !important;
+    max-height: 50px;
   }
+  
+  .text-center img[alt="StudyHive Logo"] {
+    height: 60px !important;
+    max-height: 60px;
+  }
+  
+  footer img[alt="StudyHive Logo"] {
+    height: 40px !important;
+    max-height: 40px;
+  }
+}
+
+/* UI Improvement: Better empty state styling */
+.text-muted {
+  color: #6b7280 !important;
+  font-style: italic;
+}
+
+/* UI Improvement: Loading spinner animation */
+@keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+.spinner-border {
+  animation: spin 0.75s linear infinite;
+}
+
+/* UI Improvement: Responsive improvements for mobile */
+@media (max-width: 768px) {
+  .container-fluid {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  
+  .card {
+    margin-bottom: 1rem;
   }
 }

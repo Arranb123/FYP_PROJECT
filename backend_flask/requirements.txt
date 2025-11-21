@@ -1,8 +1,11 @@
-flask
-flask-cors
+# StudyHive Backend Dependencies
+# Flask web framework
+flask==3.0.0
 
 # Flask-CORS (Cross-Origin Resource Sharing) lets your React app
 # communicate with your Flask backend even though they run on different ports (3000 vs 5000).
+flask-cors==4.0.0
 
-# Flask is the main web framework.
-# It allows you to build web servers and handle routes like /students or /login.
+# Note: sqlite3, datetime, and pathlib are built-in Python modules
+# No need to install them separately
+
