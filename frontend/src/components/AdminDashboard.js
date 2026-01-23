@@ -17,18 +17,19 @@ import axios from "axios";
 ///////////////
 /////////////////
 
-// This component allows an Administrator to view all unverified tutors,
-// approve them to become verified tutors, or reject them (delete from DB).
-// When the component loads, it fetches unverified tutors via Flask.
-// When Approve/Reject is clicked, a PUT or DELETE request is sent,
-// and the list refreshes automatically after each action.
+// admin dashboard - view unverified tutors, approve/reject them
 //reference ,mdn resource for develpers (2025) https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch used throughout majority of file to assist with 
 //understanding how to make HTTP requests (GET, POST, PUT, DELETE) to the Flask backend, handle JSON responses, and update React state based on returned data.
 function AdminDashboard() {
-  //store unverified tutors retrived from the backend
+  //store unverified tutors retrieved from the backend
   const [tutors, setTutors] = useState([]);
     //  endpoint for unverified tutor list
   const API_URL = "http://127.0.0.1:5000/api/tutors/unverified";
+  
+
+  // Story 15 - Modal state for viewing proof documents
+  // file reference: https://react.dev/reference/react/useState (lines 33-34, 180-193, 246-294)
+  const [viewingDocument, setViewingDocument] = useState(null);
 
   // Fetch unverified tutors on load
   useEffect(() => {
@@ -174,10 +175,16 @@ function AdminDashboard() {
                           {tutor.bio || <em>No bio provided</em>}
                         </small>
                       </td>
-                      {/* Iteration 2 - Proof document badge */}
+                      {/* Story 15 - Proof document with modal view */}
                       <td className="align-middle">
                         {tutor.proof_doc ? (
-                          <span className="badge bg-success">Provided</span>
+                          <button
+                            onClick={() => setViewingDocument(tutor.tutor_id)}
+                            className="btn btn-sm btn-outline-primary"
+                            title="View proof document"
+                          >
+                            📄 View Document
+                          </button>
                         ) : (
                           <span className="badge bg-secondary">No document</span>
                         )}
@@ -207,6 +214,88 @@ function AdminDashboard() {
           </div>
         </div>
       )}
+
+
+
+      {/* Story 9 - Admin view all bookings section (lines 224-235) */}
+      {/* file reference: https://getbootstrap.com/docs/5.3/ (lines 224-235) */}
+      <div className="mt-5">
+        <div className="d-flex justify-content-between align-items-center mb-3">
+          <div>
+            <h2 className="mb-2 fw-bold" style={{ fontSize: "1.75rem" }}>
+              All Bookings
+            </h2>
+            <p className="text-muted mb-0">Monitor all tutoring sessions across the platform</p>
+          </div>
+        </div>
+        <AdminAllBookings />
+      </div>
+
+      {/* Story 9 - Admin view all reviews section (lines 237-248) */}
+      {/* file reference: https://getbootstrap.com/docs/5.3/ (lines 237-248) */}
+      <div className="mt-5">
+        <div className="d-flex justify-content-between align-items-center mb-3">
+          <div>
+            <h2 className="mb-2 fw-bold" style={{ fontSize: "1.75rem" }}>
+              All Reviews
+            </h2>
+            <p className="text-muted mb-0">View all ratings and feedback from learners</p>
+          </div>
+        </div>
+        <AdminAllReviews />
+      </div>
+
+      {/* Story 15 - Modal for viewing proof documents */}
+      {/* file reference: https://getbootstrap.com/docs/5.3/components/modal/ (lines 247-294) */}
+      {viewingDocument && (
+        <div 
+          className="modal fade show" 
+          style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}
+          tabIndex="-1"
+        >
+          <div className="modal-dialog modal-xl modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Proof Document</h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => setViewingDocument(null)}
+                  aria-label="Close"
+                ></button>
+              </div>
+              <div className="modal-body p-0" style={{ height: '70vh' }}>
+                {/* file reference: https://developer.mozilla.org/en-US/docs/Web/HTML/Element/iframe (lines 272-280) */}
+                <iframe
+                  src={`http://127.0.0.1:5000/api/tutors/${viewingDocument}/proof-doc`}
+                  style={{ 
+                    width: '100%', 
+                    height: '100%', 
+                    border: 'none'
+                  }}
+                  title="Proof Document"
+                ></iframe>
+              </div>
+              <div className="modal-footer">
+                <a
+                  href={`http://127.0.0.1:5000/api/tutors/${viewingDocument}/proof-doc`}
+                  download
+                  className="btn btn-primary me-2"
+                >
+                  📥 Download
+                </a>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setViewingDocument(null)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -214,6 +303,282 @@ function AdminDashboard() {
 /////////////////
 ///////////////
 //// End OF ITERATION 1 CODE
+///////////////
+/////////////////
+
+/////////////////
+///////////////
+//// Iteration 3 - Admin All Bookings Component
+///////////////
+/////////////////
+
+// Story 9 - Component to display all bookings for admin
+// Story 13 - Shows full timestamps (created_at and updated_at) to track user activity
+// file references: https://react.dev/reference/react/useState (lines 314-316)
+// file references: https://react.dev/reference/react/useEffect (lines 318-320)
+// file references: https://axios-http.com/docs/intro (line 326)
+// file references: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/toLocaleString (lines 374-379, 418-424, 430-436)
+// file references: https://getbootstrap.com/docs/5.3/ (lines 336-447)
+const AdminAllBookings = () => {
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetchAllBookings();
+  }, []);
+
+  const fetchAllBookings = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await axios.get("http://127.0.0.1:5000/api/admin/bookings");
+      setBookings(res.data);
+    } catch (err) {
+      setError(err?.response?.data?.error || "Failed to load bookings");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="card shadow-sm">
+      <div className="card-body">
+        {loading && (
+          <div className="alert alert-info d-flex align-items-center">
+            <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            Loading bookings...
+          </div>
+        )}
+        
+        {error && (
+          <div className="alert alert-danger">{error}</div>
+        )}
+
+        {!loading && !error && bookings.length === 0 ? (
+          <div className="text-center py-5">
+            <h5 className="fw-semibold mb-2">No Bookings Yet</h5>
+            <p className="text-muted mb-0">No tutoring sessions have been booked yet.</p>
+          </div>
+        ) : (
+          <div className="table-responsive">
+            <table className="table table-hover mb-0">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Time</th>
+                  <th>Duration</th>
+                  <th>Learner</th>
+                  <th>Tutor</th>
+                  <th>Modules</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                  <th>Last Updated</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bookings.map((booking) => (
+                  <tr key={booking.booking_id}>
+                    <td className="align-middle">
+                      <strong>{new Date(booking.session_date).toLocaleDateString('en-US', { 
+                        weekday: 'short',
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                      })}</strong>
+                    </td>
+                    <td className="align-middle">{booking.session_time}</td>
+                    <td className="align-middle">
+                      <span className="badge bg-secondary">{booking.duration} min</span>
+                    </td>
+                    <td className="align-middle">
+                      <div>
+                        <strong>{booking.learner_name}</strong>
+                        <br />
+                        <small className="text-muted">{booking.learner_email}</small>
+                      </div>
+                    </td>
+                    <td className="align-middle">
+                      <strong>{booking.tutor_name}</strong>
+                    </td>
+                    <td className="align-middle">
+                      <span className="badge bg-info text-dark">{booking.tutor_modules}</span>
+                    </td>
+                    <td className="align-middle">
+                      <span className={`badge ${
+                        booking.status === "cancelled" 
+                          ? "bg-danger"
+                          : booking.status === "rescheduled" 
+                          ? "bg-warning text-dark"
+                          : booking.status === "pending"
+                          ? "bg-secondary"
+                          : booking.status === "completed"
+                          ? "bg-success"
+                          : booking.status === "missed"
+                          ? "bg-dark"
+                          : "bg-success"
+                      }`}>
+                        {booking.status}
+                      </span>
+                    </td>
+                    {/* Story 13 - Show full timestamp (date and time) for created_at */}
+                    <td className="align-middle">
+                      <small className="text-muted" title={booking.created_at}>
+                        {booking.created_at ? new Date(booking.created_at).toLocaleString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        }) : 'N/A'}
+                      </small>
+                    </td>
+                    {/* Story 13 - Show full timestamp (date and time) for updated_at */}
+                    <td className="align-middle">
+                      <small className="text-muted" title={booking.updated_at}>
+                        {booking.updated_at ? new Date(booking.updated_at).toLocaleString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        }) : 'N/A'}
+                      </small>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/////////////////
+///////////////
+//// End Iteration 3 - Admin All Bookings Component
+///////////////
+/////////////////
+
+/////////////////
+///////////////
+//// Iteration 3 - Admin All Reviews Component
+///////////////
+/////////////////
+
+// Story 9 - admin view all reviews
+// Story 13 - shows timestamps for when reviews were submitted
+// file references: https://react.dev/reference/react/useState (lines 465-467)
+// file references: https://react.dev/reference/react/useEffect (lines 469-471)
+// file references: https://axios-http.com/docs/intro (line 477)
+// file references: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/toLocaleString (lines 545-551)
+// file references: https://getbootstrap.com/docs/5.3/ (lines 487-562)
+const AdminAllReviews = () => {
+  const [reviews, setReviews] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetchAllReviews();
+  }, []);
+
+  const fetchAllReviews = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await axios.get("http://127.0.0.1:5000/api/admin/reviews");
+      setReviews(res.data);
+    } catch (err) {
+      setError(err?.response?.data?.error || "Failed to load reviews");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="card shadow-sm">
+      <div className="card-body">
+        {loading && (
+          <div className="alert alert-info d-flex align-items-center">
+            <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            Loading reviews...
+          </div>
+        )}
+        
+        {error && (
+          <div className="alert alert-danger">{error}</div>
+        )}
+
+        {!loading && !error && reviews.length === 0 ? (
+          <div className="text-center py-5">
+            <h5 className="fw-semibold mb-2">No Reviews Yet</h5>
+            <p className="text-muted mb-0">No reviews have been submitted yet.</p>
+          </div>
+        ) : (
+          <div className="table-responsive">
+            <table className="table table-hover mb-0">
+              <thead>
+                <tr>
+                  <th>Rating</th>
+                  <th>Learner</th>
+                  <th>Tutor</th>
+                  <th>Modules</th>
+                  <th>Comment</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reviews.map((review) => (
+                  <tr key={review.review_id}>
+                    <td className="align-middle">
+                      <span className="badge bg-warning text-dark" style={{ fontSize: "1rem" }}>
+                        {review.rating}/5 ⭐
+                      </span>
+                    </td>
+                    <td className="align-middle">
+                      <strong>{review.learner_name}</strong>
+                    </td>
+                    <td className="align-middle">
+                      <strong>{review.tutor_name}</strong>
+                    </td>
+                    <td className="align-middle">
+                      <span className="badge bg-info text-dark">{review.tutor_modules}</span>
+                    </td>
+                    <td className="align-middle">
+                      {review.comment ? (
+                        <small>{review.comment}</small>
+                      ) : (
+                        <em className="text-muted">No comment</em>
+                      )}
+                    </td>
+                    {/* Story 13 - Show full timestamp (date and time) for review created_at */}
+                    <td className="align-middle">
+                      <small className="text-muted" title={review.created_at}>
+                        {review.created_at ? new Date(review.created_at).toLocaleString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        }) : 'N/A'}
+                      </small>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/////////////////
+///////////////
+//// End Iteration 3 - Admin All Reviews Component
 ///////////////
 /////////////////
 

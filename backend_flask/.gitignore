@@ -31,3 +31,6 @@ dist/
 build/
 *.egg-info/
 
+# Story 15 - Uploaded proof documents (user-uploaded files)
+uploads/
+

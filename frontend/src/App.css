@@ -149,6 +149,31 @@ body {
   border: none;
   padding: 1rem 1.25rem;
   margin-bottom: 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.alert-success {
+  background-color: #d1fae5;
+  color: #065f46;
+  border-left: 4px solid var(--success-color);
+}
+
+.alert-danger {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border-left: 4px solid var(--danger-color);
+}
+
+.alert-warning {
+  background-color: #fef3c7;
+  color: #92400e;
+  border-left: 4px solid var(--warning-color);
+}
+
+.alert-info {
+  background-color: #dbeafe;
+  color: #1e40af;
+  border-left: 4px solid var(--info-color);
 }
 
 /* UI Improvement: Better modal backdrop and styling */
@@ -295,7 +320,166 @@ footer img[alt="StudyHive Logo"]:hover {
   animation: spin 0.75s linear infinite;
 }
 
-/* UI Improvement: Responsive improvements for mobile */
+/* UI Improvement: Enhanced input group styling */
+.input-group {
+  margin-bottom: 1rem;
+}
+
+.input-group-text {
+  background-color: #f9fafb;
+  border-color: #d1d5db;
+  color: #6b7280;
+}
+
+/* UI Improvement: Better search input styling */
+.form-control::placeholder {
+  color: #9ca3af;
+  opacity: 0.7;
+}
+
+/* UI Improvement: Enhanced card header styling */
+.card-header {
+  background-color: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  font-weight: 600;
+  padding: 1rem 1.25rem;
+}
+
+/* UI Improvement: Better spacing for form groups */
+.form-group {
+  margin-bottom: 1.25rem;
+}
+
+.form-label {
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 0.5rem;
+}
+
+/* UI Improvement: Enhanced button group styling */
+.btn-group {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border-radius: var(--border-radius);
+  overflow: hidden;
+}
+
+/* UI Improvement: Better disabled button styling */
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* UI Improvement: Enhanced loading state */
+.spinner-border-sm {
+  width: 1rem;
+  height: 1rem;
+  border-width: 0.15em;
+}
+
+/* UI Improvement: Better text selection */
+::selection {
+  background-color: rgba(79, 70, 229, 0.2);
+  color: inherit;
+}
+
+/* UI Improvement: Smooth scroll behavior */
+html {
+  scroll-behavior: smooth;
+}
+
+/* UI Improvement: Enhanced focus visible for accessibility */
+*:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+/* UI Improvement: Better link styling */
+a {
+  color: var(--primary-color);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+a:hover {
+  color: var(--primary-hover);
+  text-decoration: underline;
+}
+
+/* UI Improvement: Enhanced dropdown menu */
+.dropdown-menu {
+  border-radius: var(--border-radius);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e5e7eb;
+  padding: 0.5rem;
+}
+
+.dropdown-item {
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  transition: background-color 0.15s ease;
+}
+
+.dropdown-item:hover {
+  background-color: #f3f4f6;
+}
+
+/* UI Improvement: Better pagination styling */
+.pagination {
+  margin-top: 1.5rem;
+}
+
+.page-link {
+  border-radius: var(--border-radius);
+  margin: 0 0.25rem;
+  border-color: #d1d5db;
+  color: var(--primary-color);
+}
+
+.page-link:hover {
+  background-color: #f3f4f6;
+  border-color: var(--primary-color);
+}
+
+/* UI Improvement: Enhanced tooltip styling */
+.tooltip {
+  font-size: 0.875rem;
+}
+
+.tooltip-inner {
+  background-color: #1f2937;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+}
+
+/* UI Improvement: Better progress bar */
+.progress {
+  height: 0.5rem;
+  border-radius: var(--border-radius);
+  background-color: #e5e7eb;
+}
+
+.progress-bar {
+  border-radius: var(--border-radius);
+}
+
+/* UI Improvement: Enhanced list group */
+.list-group-item {
+  border-color: #e5e7eb;
+  padding: 0.75rem 1rem;
+  transition: background-color 0.15s ease;
+}
+
+.list-group-item:hover {
+  background-color: #f9fafb;
+}
+
+.list-group-item.active {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+/* UI Improvement: Better responsive improvements for mobile */
 @media (max-width: 768px) {
   .container-fluid {
     padding-left: 1rem;
@@ -304,5 +488,29 @@ footer img[alt="StudyHive Logo"]:hover {
   
   .card {
     margin-bottom: 1rem;
+  }
+  
+  .btn {
+    font-size: 0.875rem;
+    padding: 0.4rem 1rem;
+  }
+  
+  .table {
+    font-size: 0.875rem;
+  }
+  
+  .table thead th {
+    padding: 0.75rem 0.5rem;
+    font-size: 0.75rem;
+  }
+  
+  .navbar-nav {
+    flex-direction: column;
+    width: 100%;
+  }
+  
+  .navbar-nav .btn {
+    width: 100%;
+    margin-bottom: 0.5rem;
   }
 }

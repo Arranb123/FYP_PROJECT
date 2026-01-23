@@ -1,46 +1,39 @@
-// This component displays all bookings for a specific learner 
-// It shows a table with all the tutoring sessions the learner has booked
+// Iteration 3 - Story 12: Review functionality references
+// file references: https://react.dev/reference/react/useState (lines 41-49, 52)
+// file references: https://react.dev/reference/react/useCallback (line 124)
+// file references: https://react.dev/reference/react/useEffect (line 258)
+// file references: https://axios-http.com/docs/intro (lines 130, 162)
+// file references: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/async_function (lines 124, 150)
+// file references: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/try...catch (lines 129, 161)
+// file references: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date (lines 228-237)
+// file references: https://www.w3schools.com/react/react_forms.asp (lines 423-470)
+// file references: https://getbootstrap.com/docs/5.3/ (lines 391-404, 423-470)
 
-// Import React and the hooks needed
 import React, { useEffect, useState, useCallback } from "react";
-// Import axios for making HTTP requests to the backend
 import axios from "axios";
 
-// This component receives learnerId as a prop 
-// learnerId= The ID of the learner whose bookings I want to display
 const LearnerBookings = ({ learnerId }) => {
-  // STATE VARIABLES
   
-  // This array stores all the bookings for this learner
-  // It starts as an empty array []
   const [bookings, setBookings] = useState([]);
-  
-  // This boolean tracks whether I'm currently loading data from the server
-  // true = loading, false = not loading
   const [loading, setLoading] = useState(false);
-  
-  // This stores any error message I want to show to the user
-  // Empty string means no error
   const [error, setError] = useState("");
-
-  // This holds temporary success/error messages for actions like cancel/reschedule
   const [actionMessage, setActionMessage] = useState({ type: "", text: "" });
-
-  // This keeps track of which booking the learner is currently rescheduling
   const [rescheduleBookingId, setRescheduleBookingId] = useState(null);
-
-  // This stores the form values (date/time) for rescheduling
   const [rescheduleForm, setRescheduleForm] = useState({
     session_date: "",
     session_time: "",
   });
-
-  // This holds the booking ID that currently has an action in progress (to disable buttons)
   const [actionLoadingId, setActionLoadingId] = useState(null);
 
-  // FUNCTIONS
+  // Story 12 - review state
+  const [reviewBookingId, setReviewBookingId] = useState(null);
+  const [reviewForm, setReviewForm] = useState({
+    rating: "",
+    comment: "",
+  });
+  const [reviewedBookings, setReviewedBookings] = useState(new Set());
 
-  // Story 10 - Gets all bookings for this learner from backend
+  // Story 10 - fetch bookings
   const fetchBookings = useCallback(async () => {
     // Stop if no learner selected
     if (!learnerId) {
@@ -106,6 +99,75 @@ const LearnerBookings = ({ learnerId }) => {
     }
   };
 
+  // Story 12 - check which bookings have reviews
+  // file reference: https://react.dev/reference/react/useCallback (line 124)
+  // file reference: https://axios-http.com/docs/intro (line 130)
+  const checkExistingReviews = useCallback(async () => {
+    if (!learnerId || bookings.length === 0) return;
+    
+    const reviewedSet = new Set();
+    for (const booking of bookings) {
+      try {
+        const res = await axios.get(`http://127.0.0.1:5000/api/reviews/booking/${booking.booking_id}`);
+        if (res.data.exists) {
+          reviewedSet.add(booking.booking_id);
+        }
+      } catch (err) {
+        // Ignore errors for individual review checks
+        console.error(`Error checking review for booking ${booking.booking_id}:`, err);
+      }
+    }
+    setReviewedBookings(reviewedSet);
+  }, [bookings, learnerId]);
+
+  // Story 12 - Opens the review form for a specific booking
+  const handleStartReview = (booking) => {
+    setActionMessage({ type: "", text: "" });
+    setReviewBookingId(booking.booking_id);
+    setReviewForm({ rating: "", comment: "" });
+  };
+
+  // Story 12 - submit review
+  // file reference: https://axios-http.com/docs/intro (line 162)
+  // file reference: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/async_function (line 150)
+  const handleReviewSubmit = async (event, booking) => {
+    event.preventDefault();
+    
+    if (!reviewForm.rating || parseInt(reviewForm.rating) < 1 || parseInt(reviewForm.rating) > 5) {
+      setActionMessage({ type: "error", text: "Please select a rating between 1 and 5 stars." });
+      return;
+    }
+
+    setActionMessage({ type: "", text: "" });
+    setActionLoadingId(booking.booking_id);
+    
+    try {
+      await axios.post("http://127.0.0.1:5000/api/reviews", {
+        booking_id: booking.booking_id,
+        learner_id: learnerId,
+        tutor_id: booking.tutor_id,
+        rating: parseInt(reviewForm.rating),
+        comment: reviewForm.comment.trim() || "",
+      });
+      
+      setActionMessage({ type: "success", text: "Review submitted successfully! Thank you for your feedback." });
+      setReviewBookingId(null);
+      setReviewForm({ rating: "", comment: "" });
+      
+      await fetchBookings();
+      setTimeout(() => checkExistingReviews(), 500);
+    } catch (err) {
+      console.error("Review submission error:", err);
+      const message =
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to submit review. Please try again.";
+      setActionMessage({ type: "error", text: message });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
   // Story 7 - Handles rescheduling a booking
   // Updates the booking with new date and time
   const handleRescheduleSubmit = async (event, bookingId) => {
@@ -145,13 +207,44 @@ const LearnerBookings = ({ learnerId }) => {
 
   // USE EFFECT HOOK
 
+  // Story 12 - Check if a booking is in the past (can be reviewed)
+  // Checks both date and time to ensure the session has actually passed
+  // file reference: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date (lines 228-237)
+  const isBookingInPast = (booking) => {
+    if (!booking || !booking.session_date) return false;
+    
+    const now = new Date();
+    const bookingDate = new Date(booking.session_date);
+    
+    // Parse the session time (format: "HH:MM") - handle missing or invalid time
+    if (booking.session_time && typeof booking.session_time === 'string') {
+      const timeParts = booking.session_time.split(':');
+      if (timeParts.length >= 2) {
+        const hours = parseInt(timeParts[0], 10) || 0;
+        const minutes = parseInt(timeParts[1], 10) || 0;
+        bookingDate.setHours(hours, minutes, 0, 0);
+      }
+    }
+    // If no session_time, just check the date (defaults to midnight)
+    
+    // Return true if booking datetime is in the past
+    return bookingDate < now;
+  };
+
   // Story 10 - Automatically fetch bookings when component loads or learner changes
   // If the user selects a different learner, it fetches that learner's bookings
   useEffect(() => {
     fetchBookings();
   }, [learnerId, fetchBookings]);  // Include both learnerId and fetchBookings in dependencies
 
-  // RENDER - This returns the HTML/JSX that gets displayed
+  // Story 12 - check reviews when bookings load
+  // file reference: https://react.dev/reference/react/useEffect (line 258)
+  useEffect(() => {
+    if (bookings.length > 0) {
+      checkExistingReviews();
+    }
+  }, [bookings, checkExistingReviews]);
+
   return (
     <div className="card shadow-sm">
       <div className="card-body">
@@ -278,23 +371,110 @@ const LearnerBookings = ({ learnerId }) => {
                       {/* Action buttons */}
                       <td className="align-middle text-end">
                         <div className="d-flex flex-wrap gap-2 justify-content-end">
+                          {/* Story 12 - Show "Leave Review" button for past bookings that haven't been reviewed */}
+                          {/* file reference: https://getbootstrap.com/docs/5.3/ (lines 391-404) */}
+                          {isBookingInPast(booking) && !reviewedBookings.has(booking.booking_id) && booking.status !== "cancelled" && (
+                            <button
+                              className="btn btn-sm btn-outline-success"
+                              onClick={() => handleStartReview(booking)}
+                              disabled={actionLoadingId === booking.booking_id}
+                            >
+                              Leave Review
+                            </button>
+                          )}
+                          {/* Story 12 - Show "Reviewed" badge if review exists */}
+                          {reviewedBookings.has(booking.booking_id) && (
+                            <span className="badge bg-success">Reviewed</span>
+                          )}
                           <button
                             className="btn btn-sm btn-outline-secondary"
                             onClick={() => handleStartReschedule(booking)}
-                            disabled={actionLoadingId === booking.booking_id}
+                            disabled={actionLoadingId === booking.booking_id || booking.status === "cancelled"}
                           >
                             Reschedule
                           </button>
                           <button
                             className="btn btn-sm btn-outline-danger"
                             onClick={() => handleCancelBooking(booking.booking_id)}
-                            disabled={actionLoadingId === booking.booking_id}
+                            disabled={actionLoadingId === booking.booking_id || booking.status === "cancelled"}
                           >
                             {actionLoadingId === booking.booking_id ? "Processing..." : "Cancel"}
                           </button>
                         </div>
                       </td>
                     </tr>
+
+                    {/* Story 12 - Review form row (only shown for the selected booking) */}
+                    {/* file reference: https://www.w3schools.com/react/react_forms.asp (lines 423-470) */}
+                    {/* file reference: https://getbootstrap.com/docs/5.3/ (lines 423-470) */}
+                    {reviewBookingId === booking.booking_id && (
+                      <tr className="bg-light">
+                        <td colSpan="7">
+                          <div className="p-3">
+                            <h6 className="fw-bold mb-3">Leave a Review for {booking.tutor_name}</h6>
+                            <form onSubmit={(event) => handleReviewSubmit(event, booking)}>
+                              <div className="mb-3">
+                                <label className="form-label fw-semibold">Rating *</label>
+                                <div className="d-flex gap-2 align-items-center">
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <button
+                                      key={star}
+                                      type="button"
+                                      className={`btn ${reviewForm.rating === star.toString() ? 'btn-warning' : 'btn-outline-warning'}`}
+                                      onClick={() => setReviewForm((prev) => ({ ...prev, rating: star.toString() }))}
+                                    >
+                                      ⭐
+                                    </button>
+                                  ))}
+                                  <span className="ms-2 text-muted">
+                                    {reviewForm.rating ? `${reviewForm.rating} out of 5 stars` : 'Select rating'}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="mb-3">
+                                <label className="form-label fw-semibold" htmlFor={`review-comment-${booking.booking_id}`}>
+                                  Comment (Optional)
+                                </label>
+                                <textarea
+                                  className="form-control"
+                                  id={`review-comment-${booking.booking_id}`}
+                                  rows="3"
+                                  placeholder="Share your experience with this tutor..."
+                                  value={reviewForm.comment}
+                                  onChange={(e) => setReviewForm((prev) => ({ ...prev, comment: e.target.value }))}
+                                />
+                              </div>
+                              <div className="d-flex gap-2">
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  onClick={() => {
+                                    setReviewBookingId(null);
+                                    setReviewForm({ rating: "", comment: "" });
+                                  }}
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="submit"
+                                  className="btn btn-primary"
+                                  disabled={actionLoadingId === booking.booking_id || !reviewForm.rating}
+                                >
+                                  {actionLoadingId === booking.booking_id ? (
+                                    <>
+                                      <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                      Submitting...
+                                    </>
+                                  ) : (
+                                    "Submit Review"
+                                  )}
+                                </button>
+                              </div>
+                            </form>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
 
                     {/* Reschedule form row (only shown for the selected booking) */}
                     {rescheduleBookingId === booking.booking_id && (
@@ -369,5 +549,9 @@ const LearnerBookings = ({ learnerId }) => {
   );
 };
 
+// Story 12 - Review functionality added to LearnerBookings component
+// End Iteration 3 additions
+
 // Export this component so it can be imported and used in other files
 export default LearnerBookings;
+

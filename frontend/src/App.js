@@ -1,9 +1,9 @@
 //studyhive frontend - Iteration 1
 //Author : Arran Bearman
 
-// React Docs (2025) "useState, useEffect" — https://react.dev/reference/react
+// React Docs (2025) "useState, useEffect, useMemo" — https://react.dev/reference/react
 // Used for component state and running code on initial render.
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 
 // Local components (rendered conditionally via navigation)
 import TutorSearch from "./components/TutorSearch"; //  Tutor Search component
@@ -12,8 +12,19 @@ import AdminDashboard from "./components/AdminDashboard"; //  Admin Dashboard co
 // Iteration 2 additions
 import TutorBookings from "./components/TutorBookings";  // Component to show tutor's bookings
 import LearnerBookings from "./components/LearnerBookings"; // Component to show learner's bookings
+// Iteration 3 additions
+import Login from "./components/Login"; // Login component
+import Register from "./components/Register"; // Register component
+import TutorProfileEdit from "./components/TutorProfileEdit"; // Tutor profile edit component
 // Import the custom CSS file for styling
 import "./App.css";
+
+// Iteration 3 - Authentication and role-based navigation references
+// file references: https://react.dev/reference/react/useState (lines 34-51)
+// file references: https://react.dev/reference/react/useMemo (lines 90-112)
+// file references: https://react.dev/reference/react/useEffect (lines 141-150)
+// file references: https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage (lines 79, 134)
+// file references: https://developer.mozilla.org/en-US/docs/Web/API/Window/sessionStorage (line 119)
 
 /////////////////
 
@@ -27,17 +38,13 @@ import "./App.css";
 //understanding how to make HTTP requests (GET, POST, PUT, DELETE) to the Flask backend, handle JSON responses, and update React state based on returned data.
 // https://chatgpt.com/share/690e51cc-8464-8008-b5bc-574c9f276503  -- Chat Gpt conversation used to lead me in the right direction to be able to adapt code myself 
 function App() {
-  //   Controls which page is currently shown for the user
-  const [currentPage, setCurrentPage] = useState("students"); //students is the default page for iteration 1
+  // Iteration 3 - check for stored user on mount
+  const [initialUserCheck, setInitialUserCheck] = useState(false);
+  const [currentPage, setCurrentPage] = useState(null);
 
-  // Iteration 2 additions  for booking management
-  // This stores the ID of the tutor that was selected to view bookings
-  // null means no tutor is selected yet
-  const [selectedTutorId, setSelectedTutorId] = useState(null);
-  
-  // This stores the ID of the learner that was selected to view bookings
-  // null means no learner is selected yet
-  const [selectedLearnerId, setSelectedLearnerId] = useState(null);
+  // Iteration 3 - auth state
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authPage, setAuthPage] = useState('login');
 
   // STUDENT SYSTEM STATE + LOGIC
   // reference , https://www.w3schools.com/REACT/react_usestate.asp
@@ -60,21 +67,106 @@ function App() {
   // Empty string means no message to show
   const [message, setMessage] = useState("");
 
+  // Iteration 3 - Handle successful login
+  // file reference: https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage (lines 74-88)
+  const handleLoginSuccess = (userData) => {
+    setCurrentUser(userData);
+    setAuthPage(null);
+    // Store user in localStorage for persistence
+    localStorage.setItem('currentUser', JSON.stringify(userData));
+    // Redirect based on role
+    if (userData.role === 'admin') {
+      setCurrentPage('admin');
+    } else if (userData.role === 'tutor') {
+      setCurrentPage('tutor-bookings');
+    } else {
+      setCurrentPage('learner-bookings');
+    }
+  };
+  
+  // Iteration 3 - get pages based on role
+  // file reference: https://react.dev/reference/react/useMemo (lines 90-112)
+  const availablePages = useMemo(() => {
+    if (!currentUser) return [];
+    
+    const role = currentUser.role;
+    const basePages = [];
+    
+    if (role === 'admin') {
+      // Admin sees: Admin Dashboard
+      basePages.push('admin');
+    } else if (role === 'tutor') {
+      // Tutor sees: Tutor Signup (if not linked), Tutor Bookings, Edit Profile
+      if (!currentUser.tutor_id) {
+        basePages.push('signup');  // Show signup if tutor profile not linked
+      }
+      basePages.push('tutor-bookings', 'tutor-profile-edit');
+    } else if (role === 'learner') {
+      // Learner sees: Tutor Search, My Bookings
+      basePages.push('tutors', 'learner-bookings');
+    }
+    
+    return basePages;
+  }, [currentUser]);
+
+  // Iteration 3 - registration success handler
+  // file reference: https://developer.mozilla.org/en-US/docs/Web/API/Window/sessionStorage (lines 114-129)
+  const handleRegisterSuccess = (userData) => {
+    // If user registered as tutor, redirect them to tutor signup form
+    if (userData && userData.role === 'tutor') {
+      // Store the email temporarily so tutor signup can pre-fill it
+      sessionStorage.setItem('pendingTutorEmail', userData.email);
+      // Show tutor signup page
+      setCurrentPage('signup');
+      setAuthPage(null);
+      setMessage("Registration successful! Please complete your tutor profile below.");
+    } else {
+      // For other roles, show login page
+      setAuthPage('login');
+      setMessage("Registration successful! Please log in.");
+    }
+  };
+
+  // Iteration 3 - Handle logout
+  // file reference: https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage (lines 131-137)
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('currentUser');
+    setCurrentPage(null);
+    setAuthPage('login');
+  };
+
   const API_URL = "http://localhost:5000/students"; // Flask backend API URL // defines backend endpoint, allows to call flask from react and modify DB
+
+  // Iteration 3 - check for stored user on mount
+  // file reference: https://react.dev/reference/react/useEffect (lines 141-150)
+  // file reference: https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage (lines 141-150)
+  useEffect(() => {
+    // Don't auto-restore user session - always start at login page
+    // User must log in fresh on each page reload
+    setCurrentUser(null);
+    setCurrentPage(null); // Always show login page
+    setAuthPage('login'); // Show login form
+    setInitialUserCheck(true);
+  }, []);
 
   // loads all students once the page loads , only occurs once
   useEffect(() => {
-    fetchStudents();
-  }, []);
-
-  // Iteration 2 addition - fetch tutors when tutorbookings page is accessed
-  // This runs whenever currentPage changes
-  // If the user navigates to the tutor-bookings page, it fetches the list of tutors
-  useEffect(() => {
-    if (currentPage === "tutor-bookings") {
-      fetchTutors();
+    if (currentUser) { // Only fetch if user is logged in
+      fetchStudents();
     }
-  }, [currentPage]);
+  }, [currentUser]);
+
+  // Iteration 3 - Removed tutor fetching for dropdowns since tutors now see only their own data
+  
+  // Iteration 3 - If current page is not available for user role, redirect to first available page
+  useEffect(() => {
+    if (currentUser && currentPage && !availablePages.includes(currentPage)) {
+      if (availablePages.length > 0) {
+        setCurrentPage(availablePages[0]);
+      }
+    }
+  }, [currentUser, currentPage, availablePages]);
 
   const fetchStudents = async () => {  // function sends a get request to flask to get all stidents and show in frontend table
     try {
@@ -193,6 +285,71 @@ function App() {
   // - Top button row sets currentPage
   //   conditional blocks render Students / TutorSearch / TutorSignup / Admin
 
+  // Iteration 3 - Show login/register page if not authenticated
+  // All hooks must be called before any early returns
+  // file reference: https://react.dev/reference/react (conditional rendering - lines 287-298)
+  if (!initialUserCheck) {
+    return (
+      <div className="container-fluid py-4" style={{ minHeight: "100vh" }}>
+        <div className="text-center">
+          <span className="spinner-border" role="status" aria-hidden="true"></span>
+          <p className="mt-2">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+
+  // Iteration 3 - show login/register if not logged in
+  // file reference: https://react.dev/reference/react (conditional rendering - lines 301-330)
+  if (!currentUser) {
+    // Allow tutor signup page if user just registered as tutor
+    if (currentPage === "signup") {
+      return (
+        <div className="container-fluid py-4" style={{ minHeight: "100vh" }}>
+          <TutorSignup />
+        </div>
+      );
+    }
+    return (
+      <div className="container-fluid py-4" style={{ minHeight: "100vh", backgroundColor: "#f8f9fa" }}>
+        <div className="container">
+          {authPage === 'register' ? (
+            <Register onRegisterSuccess={handleRegisterSuccess} />
+          ) : (
+            <Login onLoginSuccess={handleLoginSuccess} />
+          )}
+          {/* Toggle between login and register */}
+          <div className="text-center mt-3">
+            {authPage === 'register' ? (
+              <p className="text-muted">
+                Already have an account?{' '}
+                <button 
+                  className="btn btn-link p-0" 
+                  onClick={() => setAuthPage('login')}
+                  style={{ textDecoration: 'underline' }}
+                >
+                  Login here
+                </button>
+              </p>
+            ) : (
+              <p className="text-muted">
+                Don't have an account?{' '}
+                <button 
+                  className="btn btn-link p-0" 
+                  onClick={() => setAuthPage('register')}
+                  style={{ textDecoration: 'underline' }}
+                >
+                  Register here
+                </button>
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     // Iteration 2 - Enhanced container with Bootstrap styling
     <div className="container-fluid py-4" style={{ minHeight: "100vh" }}>
@@ -200,7 +357,16 @@ function App() {
       <nav className="navbar navbar-expand-lg navbar-light bg-white mb-4 rounded shadow-sm">
         <div className="container-fluid">
           {/* Iteration 2 - Brand/logo with clickable home navigation */}
-          <span className="navbar-brand fw-bold d-flex align-items-center" style={{ cursor: 'pointer', padding: '0.5rem 0' }} onClick={() => setCurrentPage("students")}>
+          <span 
+            className="navbar-brand fw-bold d-flex align-items-center" 
+            style={{ cursor: 'pointer', padding: '0.5rem 0' }} 
+            onClick={() => {
+              // Navigate to first available page for user role
+              if (availablePages.length > 0) {
+                setCurrentPage(availablePages[0]);
+              }
+            }}
+          >
             <img 
               src="/logo.png" 
               alt="StudyHive Logo" 
@@ -213,39 +379,54 @@ function App() {
             />
             <span style={{ display: 'none' }}>StudyHive</span>
           </span>
-          {/* Iteration 2 - Enhanced navigation buttons with light blue styling */}
-          <div className="navbar-nav flex-row flex-wrap">
-            {/* Iteration 2 - Added learner-bookings and tutor-bookings to navigation */}
-            {["students", "tutors", "signup", "admin", "learner-bookings", "tutor-bookings"].map((page) => (
+          {/* Iteration 3 - Role-based navigation buttons */}
+          {/* file reference: https://react.dev/reference/react/useMemo (lines 379-410) */}
+          {/* file reference: https://getbootstrap.com/docs/5.3/ (lines 379-410) */}
+          <div className="navbar-nav flex-row flex-wrap align-items-center">
+            {/* User info and logout */}
+            <span className="me-3 mb-2 text-muted small">
+              Logged in as: <strong className="text-dark">{currentUser.email}</strong> <span className="badge bg-secondary ms-1">{currentUser.role}</span>
+            </span>
+            <button
+              onClick={handleLogout}
+              className="btn btn-outline-danger me-2 mb-2"
+              style={{ minWidth: "100px", fontSize: "0.9rem" }}
+            >
+              Logout
+            </button>
+            
+            {/* Iteration 3 - Show only pages available for current user role */}
+            {/* file reference: https://react.dev/reference/react/useMemo (lines 393-410) */}
+            {availablePages.map((page) => (
               <button
                 key={page}
                 onClick={() => setCurrentPage(page)}
-                // Iteration 2 - Use light blue navigation button styling, highlight current page
                 className={`btn btn-nav me-2 mb-2 ${currentPage === page ? "btn-nav-active" : ""}`}
                 style={{ 
                   minWidth: "120px",
                   fontSize: "0.9rem"
                 }}
               >
-                {page === "students"
-                  ? "Students"
-                  : page === "tutors"
+                {page === "tutors"
                   ? "Tutor Search"
-                  : page === "signup"
-                  ? "Tutor Signup"
                   : page === "admin"
-                  ? "Admin"
+                  ? "Admin Dashboard"
                   : page === "learner-bookings"
                   ? "My Bookings"
-                  : "Tutor Bookings"}
+                  : page === "tutor-bookings"
+                  ? "My Bookings"
+                  : page === "tutor-profile-edit"
+                  ? "Edit Profile"
+                  : page}
               </button>
             ))}
           </div>
         </div>
       </nav>
 
-      {/*  Conditional Rendering */}
-      {currentPage === "students" && (
+      {/*  Conditional Rendering - Only show pages user has access to */}
+      {/* Note: Students page removed from role-based navigation - only accessible via direct URL if admin */}
+      {currentPage === "students" && currentUser?.role === 'admin' && (
         // Iteration 2 - Enhanced container with Bootstrap styling
         <div className="container">
           {/* Iteration 2 - Page header with logo */}
@@ -410,17 +591,69 @@ function App() {
         </div>
       )}
 
-      {/*  Tutor Search Page */}
-      {currentPage === "tutors" && <TutorSearch />}
+      {/*  Tutor Search Page - Available to learners and tutors */}
+      {/* Iteration 3 - Tutor Search - Only for learners (tutors don't need to search for other tutors) */}
+      {/* file reference: https://react.dev/reference/react (conditional rendering - lines 606-640) */}
+      {currentPage === "tutors" && currentUser?.role === 'learner' && (
+        <>
+          {!currentUser?.student_id && (
+            <div className="container">
+              <div className="alert alert-warning">
+                <strong>Account Setup Required:</strong> Your learner account is not linked to a student record. 
+                Please log out and register again, or contact an administrator to link your account.
+              </div>
+            </div>
+          )}
+          <TutorSearch learnerId={currentUser?.student_id || null} />
+        </>
+      )}
 
-      {/*  Tutor Signup Page */}
+      {/*  Tutor Signup Page - Available to all (for new tutor registration) */}
+      {/* Iteration 3 - Allow signup page even when not logged in (for post-registration flow) */}
+      {/* file reference: https://react.dev/reference/react (conditional rendering - lines 623-625) */}
       {currentPage === "signup" && <TutorSignup />}
 
-      {/*  Admin Dashboard Page */}
-      {currentPage === "admin" && <AdminDashboard />}
+      {/*  Admin Dashboard Page - Only for admins */}
+      {/* file reference: https://react.dev/reference/react (conditional rendering - line 628) */}
+      {currentPage === "admin" && currentUser?.role === 'admin' && <AdminDashboard />}
 
-      {/* Iteration 2 - Learner Bookings page */}
-      {currentPage === "learner-bookings" && (
+      {/* Iteration 3 - Tutor Profile Edit Page - Only for tutors */}
+      {/* file reference: https://react.dev/reference/react (conditional rendering - lines 630-650) */}
+      {currentPage === "tutor-profile-edit" && currentUser?.role === 'tutor' && (
+        <div className="container">
+          {currentUser?.tutor_id ? (
+            <TutorProfileEdit tutorId={currentUser.tutor_id} />
+          ) : (
+            <div className="alert alert-warning">
+              <strong>Account Setup Required:</strong> Your tutor account is not linked to a tutor profile. 
+              <br />
+              Please complete the tutor signup form first (make sure to use the SAME email you used to register: <strong>{currentUser.email}</strong>).
+              <br /><br />
+              <button 
+                className="btn btn-primary me-2"
+                onClick={() => setCurrentPage('signup')}
+              >
+                Go to Tutor Signup
+              </button>
+              <button 
+                className="btn btn-secondary"
+                onClick={() => {
+                  // Clear localStorage and reload to force fresh login
+                  localStorage.removeItem('currentUser');
+                  window.location.reload();
+                }}
+              >
+                Refresh Account (Log Out)
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Iteration 2 - Learner Bookings page - Only for learners */}
+      {/* Iteration 3 - Removed dropdown, automatically uses logged-in learner's ID */}
+      {/* file reference: https://react.dev/reference/react (conditional rendering - lines 661-680) */}
+      {currentPage === "learner-bookings" && currentUser?.role === 'learner' && (
         <div className="container">
           <div className="text-center mb-4">
             <div className="mb-3">
@@ -439,35 +672,24 @@ function App() {
               />
             </div>
             <h2 className="mb-4 fw-bold" style={{ fontSize: "1.75rem" }}>
-              Learner Bookings
+              My Bookings
             </h2>
           </div>
-          {/* Iteration 2 - Dropdown to select which learner's bookings to view */}
-          <div className="card shadow-sm mb-4">
-            <div className="card-body">
-              <label className="form-label fw-semibold mb-3">Select a Learner to View Bookings</label>
-              <select
-                className="form-select"
-                style={{ maxWidth: "500px" }}
-                value={selectedLearnerId || ""}
-                onChange={(e) => setSelectedLearnerId(parseInt(e.target.value))}
-              >
-                <option value="">-- Select Learner --</option>
-                {students.map((student) => (
-                  <option key={student.id} value={student.id}>
-                    {student.first_name} {student.last_name} ({student.college_email})
-                  </option>
-                ))}
-              </select>
+          {/* Iteration 3 - Show LearnerBookings component using logged-in learner's ID */}
+          {currentUser?.student_id ? (
+            <LearnerBookings learnerId={currentUser.student_id} />
+          ) : (
+            <div className="alert alert-warning">
+              <strong>Note:</strong> Your account is not linked to a student record. Please contact an administrator.
             </div>
-          </div>
-          {/* Iteration 2 - Show LearnerBookings component only if a learner is selected */}
-          {selectedLearnerId && <LearnerBookings learnerId={selectedLearnerId} />}
+          )}
         </div>
       )}
 
-      {/* Iteration 2 - Tutor Bookings page */}
-      {currentPage === "tutor-bookings" && (
+      {/* Iteration 2 - Tutor Bookings page - Only for tutors */}
+      {/* Iteration 3 - Removed dropdown, automatically uses logged-in tutor's ID */}
+      {/* file reference: https://react.dev/reference/react (conditional rendering - lines 696-720) */}
+      {currentPage === "tutor-bookings" && currentUser?.role === 'tutor' && (
         <div className="container">
           <div className="text-center mb-4">
             <div className="mb-3">
@@ -486,62 +708,58 @@ function App() {
               />
             </div>
             <h2 className="mb-4 fw-bold" style={{ fontSize: "1.75rem" }}>
-              Tutor Bookings
+              My Bookings
             </h2>
           </div>
-          {/* Iteration 2 - Dropdown to select which tutor's bookings to view */}
-          <div className="card shadow-sm mb-4">
-            <div className="card-body">
-              <label className="form-label fw-semibold mb-3">Select a Tutor to View Bookings</label>
-              <div className="alert alert-info mb-3" style={{ fontSize: "0.875rem" }}>
-                <strong>Note:</strong> In a full implementation, tutors would log in and see their own bookings automatically.
-              </div>
-              <select
-                className="form-select"
-                style={{ maxWidth: "500px" }}
-                value={selectedTutorId || ""}
-                onChange={(e) => setSelectedTutorId(parseInt(e.target.value))}
+          {/* Iteration 3 - Show TutorBookings component using logged-in tutor's ID */}
+          {currentUser?.tutor_id ? (
+            <TutorBookings tutorId={currentUser.tutor_id} />
+          ) : (
+            <div className="alert alert-warning">
+              <strong>Account Setup Required:</strong> Your tutor account is not linked to a tutor profile. 
+              <br />
+              Please complete the tutor signup form first (make sure to use the SAME email you used to register: <strong>{currentUser.email}</strong>).
+              <br /><br />
+              <button 
+                className="btn btn-primary me-2"
+                onClick={() => setCurrentPage('signup')}
               >
-                <option value="">-- Select Tutor --</option>
-                {tutors.map((tutor) => (
-                  <option key={tutor.tutor_id} value={tutor.tutor_id}>
-                    {tutor.first_name} {tutor.last_name} ({tutor.college_email})
-                  </option>
-                ))}
-              </select>
+                Go to Tutor Signup
+              </button>
+              <button 
+                className="btn btn-secondary"
+                onClick={() => {
+                  // Clear localStorage and reload to force fresh login
+                  localStorage.removeItem('currentUser');
+                  window.location.reload();
+                }}
+              >
+                Refresh Account (Log Out)
+              </button>
             </div>
-          </div>
-          {/* Iteration 2 - Show TutorBookings component only if a tutor is selected */}
-          {selectedTutorId && <TutorBookings tutorId={selectedTutorId} />}
+          )}
         </div>
       )}
 
-      {/* Iteration 2 - Footer with logo and tagline */}
+      {/* Iteration 2 - Footer with logo */}
       <footer className="mt-5 py-4 bg-white border-top">
         <div className="container">
           <div className="row align-items-center">
-            <div className="col-md-6 text-center text-md-start mb-3 mb-md-0">
+            <div className="col-12 text-center">
               <img 
                 src="/logo.png" 
                 alt="StudyHive Logo" 
                 className="logo-footer"
                 style={{ 
                   height: "55px", 
-                  objectFit: "contain"
+                  objectFit: "contain",
+                  opacity: 0.8
                 }} 
                 onError={(e) => {
                   // If logo doesn't load, hide it
                   e.target.style.display = 'none';
                 }}
               />
-            </div>
-            <div className="col-md-6 text-center text-md-end">
-              <p className="text-muted mb-0 small">
-                © {new Date().getFullYear()} StudyHive. All rights reserved.
-              </p>
-              <p className="text-muted mb-0 small">
-                Find Your Perfect Tutor
-              </p>
             </div>
           </div>
         </div>
@@ -550,10 +768,14 @@ function App() {
   );
 }
 
+// Iteration 3 - Authentication, role-based navigation, and conditional rendering
+// End Iteration 3
+
 /////////////////
 ///////////////
 //// END OF ITERATION 1 CODE
 ////////////////
 /////////////////
+
 
 export default App;

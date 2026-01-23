@@ -11,8 +11,8 @@
 // Reference (Axios HTTP Library):
 // Axios Docs (2025) "Making Requests" — https://axios-http.com/docs/intro
 // Used to send POST requests to the Flask backend API.
-import React, { useState } from "react"; /// use state is ahook that allows me to store and update data
-import axios from "axios";//axios uis a library for http requests
+import React, { useState } from "react"; // useState is a hook that allows me to store and update data
+import axios from "axios"; // axios is a library for http requests
 
 /////////////////
 ///////////////
@@ -28,15 +28,22 @@ import axios from "axios";//axios uis a library for http requests
 //understanding how to make HTTP requests (GET, POST, PUT, DELETE) to the Flask backend, handle JSON responses, and update React state based on returned data.
 // https://chatgpt.com/share/690e59df-25d0-8008-adf5-047c79f8f362 - -- Chat Gpt conversation used to lead me in the right direction to be able to adapt code myself
 const TutorSignup = () => {  
-  const [formData, setFormData] = useState({    //form data stores , setformdata updates when user types
-    first_name: "",//field
-    last_name: "",//field
-    college_email: "",//field
-    modules: "",//field
-    hourly_rate: "",//field
-    rating: "",//field
-    bio: "",//field
+  // Iteration 3 - Pre-fill email if coming from registration
+  const [formData, setFormData] = useState(() => {
+    const pendingEmail = sessionStorage.getItem('pendingTutorEmail');
+    return {
+      first_name: "",//field
+      last_name: "",//field
+      college_email: pendingEmail || "",//field - pre-fill if from registration
+      modules: "",//field
+      hourly_rate: "",//field
+      rating: "",//field
+      bio: "",//field
+    };
   });
+  // Story 15 - File upload state for proof documents
+  const [proofFile, setProofFile] = useState(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
   const [message, setMessage] = useState("");
 
   //also chat gpt same as in app.js file just tailored     // Original structure of this function was adapted from a ChatGPT example
@@ -46,22 +53,92 @@ const TutorSignup = () => {
   };
   //Chat GPT ends here 
 
+  // Story 15 - Handle file selection for proof documents
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Check file size (max 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        setMessage("File size must be less than 10MB.");
+        return;
+      }
+      setProofFile(file);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMessage("");
     
     try {  // sends tutor form data to backend backend adds the tutor to the database with 'verified = 0' so that an admin has to approve them first
       // Iteration 2 - Enhanced data preparation with parseFloat
+      // Validate required fields before submitting
+      if (!formData.first_name || !formData.last_name || !formData.college_email || !formData.modules || !formData.hourly_rate) {
+        setMessage("Please fill in all required fields (First Name, Last Name, Email, Modules, Hourly Rate).");
+        return;
+      }
+      
+      // Story 15 - Convert file to base64 for database storage
+      let proofDocBase64 = '';
+      if (proofFile) {
+        setUploadingFile(true);
+        
+        try {
+          // Convert file to base64 string for database storage
+          const reader = new FileReader();
+          await new Promise((resolve, reject) => {
+            reader.onload = (e) => {
+              // Remove data URL prefix (e.g., "data:image/png;base64,")
+              const base64String = e.target.result.split(',')[1] || e.target.result;
+              proofDocBase64 = base64String;
+              resolve();
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(proofFile);
+          });
+        } catch (fileError) {
+          // Don't block form submission if file conversion fails
+          proofDocBase64 = ''; // Submit without file
+        } finally {
+          setUploadingFile(false);
+        }
+      }
+      
       const tutorData = {
-        ...formData,
+        first_name: formData.first_name.trim(),
+        last_name: formData.last_name.trim(),
+        college_email: formData.college_email.trim(),
+        modules: formData.modules.trim(),
         hourly_rate: parseFloat(formData.hourly_rate),
-        verified: 0, // tutors start unverified , admin mist approve
+        rating: 0,  // Default rating, not from form
+        bio: formData.bio ? formData.bio.trim() : '',
+        verified: 0, // tutors start unverified , admin must approve
+        proof_doc: proofDocBase64,  // Story 15 - Base64 encoded file data stored in database
       };
-      const response = await axios.post("http://127.0.0.1:5000/api/tutors", tutorData);
-      if (response.status === 201) {  // if flask returns 201 it means that the tutor added succesfully
-        // Iteration 2 - Enhanced success message
-        setMessage("Tutor registered successfully! Waiting for admin approval.");
-        setFormData({ // amd restes the form for a new tutor
+      
+      // Validate hourly_rate is a valid number
+      if (isNaN(tutorData.hourly_rate) || tutorData.hourly_rate <= 0) {
+        setMessage("Please enter a valid hourly rate (must be a positive number).");
+        return;
+      }
+      
+      
+      const response = await axios.post("http://127.0.0.1:5000/api/tutors", tutorData, {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        timeout: 10000  // 10 second timeout
+      });
+      
+      
+      if (response.status === 201) {  // if flask returns 201 it means that the tutor added successfully
+        // Iteration 3 - Show enhanced success message
+        setMessage("Tutor profile created successfully! Waiting for admin approval. Your tutor profile has been linked to your account. Please log in to continue.");
+        
+        // Clear pending email from sessionStorage
+        sessionStorage.removeItem('pendingTutorEmail');
+        
+        setFormData({ // and resets the form for a new tutor
           first_name: "",
           last_name: "",
           college_email: "",
@@ -70,12 +147,50 @@ const TutorSignup = () => {
           rating: "",
           bio: "",
         });
+        setProofFile(null);  // Story 15 - Clear file selection
+        // Reset file input
+        const fileInput = document.querySelector('input[type="file"]');
+        if (fileInput) fileInput.value = '';
+        
+        // Iteration 3 - If user is logged in, refresh their user data
+        // Check if there's a current user in localStorage
+        const storedUser = localStorage.getItem('currentUser');
+        if (storedUser) {
+          try {
+            const user = JSON.parse(storedUser);
+            // If the email matches, refresh the page to get updated user data
+            if (user.email && user.email.toLowerCase() === tutorData.college_email.toLowerCase()) {
+              // Wait a moment for the backend to finish linking, then refresh
+              setTimeout(() => {
+                window.location.reload();
+              }, 2000);
+            } else {
+            }
+          } catch (error) {
+            console.error("Error parsing stored user:", error);
+          }
+        } else {
+          // If not logged in (coming from registration), redirect to login after 3 seconds
+          setTimeout(() => {
+            window.location.href = '/';
+          }, 3000);
+        }
       }
     } catch (error) { //if an error is caught eg duplicate it cathes it and displays error message
-      console.error("Error adding tutor:", error);
-      // Iteration 2 - Enhanced error handling
-      const errorMessage = error.response?.data?.error || "Error registering tutor. Please try again.";
+      console.error("Error in tutor signup process:", error);
+      
+      // Better error handling for network errors
+      let errorMessage = "Error registering tutor. Please try again.";
+      if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error') || error.message?.includes('Failed to fetch')) {
+        errorMessage = "Network Error: Cannot connect to server. Please make sure the Flask server is running on http://127.0.0.1:5000";
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       setMessage(errorMessage);
+      setUploadingFile(false);
     }
   };
 
@@ -110,6 +225,12 @@ const TutorSignup = () => {
               Tutor Sign-Up
             </h2>
             {/* Iteration 2 - Subtitle */}
+            {/* Iteration 3 - Show message if user came from registration */}
+            {sessionStorage.getItem('pendingTutorEmail') && (
+              <div className="alert alert-info mb-3">
+                <strong>Almost there!</strong> Please complete your tutor profile below. Make sure to use the same email you just registered with.
+              </div>
+            )}
             <p className="text-muted">
               Join our platform and help students succeed! Fill out the form below to get started.
             </p>
@@ -161,7 +282,10 @@ const TutorSignup = () => {
                       onChange={handleChange}
                       required
                     />
-                    <small className="text-muted">This will be used to verify your identity</small>
+                    <small className="text-muted">
+                      <strong>Important:</strong> Use the SAME email address you used when registering your account. 
+                      This links your tutor profile to your account.
+                    </small>
                   </div>
                 </div>
 
@@ -216,11 +340,42 @@ const TutorSignup = () => {
                     />
                     <small className="text-muted">Help students get to know you better</small>
                   </div>
+
+                  {/* Story 15 - Proof document upload field */}
+                  <div className="mb-3">
+                    <label className="form-label fw-semibold small text-muted">Proof of Qualification (Optional)</label>
+                    <input
+                      type="file"
+                      className="form-control"
+                      accept=".pdf,.png,.jpg,.jpeg,.gif,.doc,.docx"
+                      onChange={handleFileChange}
+                    />
+                    <small className="text-muted">
+                      Upload a document proving your qualifications (e.g., transcript, certificate). 
+                      Accepted formats: PDF, Images, Word documents. Max size: 10MB.
+                    </small>
+                    {proofFile && (
+                      <div className="mt-2">
+                        <span className="badge bg-success">File selected: {proofFile.name}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Iteration 2 - Enhanced submit button */}
-                <button type="submit" className="btn btn-primary w-100 btn-lg">
-                  Register as Tutor
+                <button 
+                  type="submit" 
+                  className="btn btn-primary w-100 btn-lg"
+                  disabled={uploadingFile}
+                >
+                  {uploadingFile ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                      Uploading document...
+                    </>
+                  ) : (
+                    "Register as Tutor"
+                  )}
                 </button>
 
                 {/* Iteration 2 - Info message about approval process */}
@@ -244,6 +399,9 @@ const TutorSignup = () => {
     </div>
   );
 };
+
+// Story 15 - File upload functionality added to TutorSignup
+// End Iteration 3 additions
 
 /////////////////
 ///////////////

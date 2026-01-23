@@ -21,39 +21,18 @@ import BookingForm from "./BookingForm";
 /////////////////
 
 // https://chatgpt.com/share/690e5570-588c-8008-97af-9d6eac98aae2 - -- Chat Gpt conversation used to lead me in the right direction to be able to adapt code myself
-const TutorSearch = () => {
+// Iteration 3 - TutorSearch receives learnerId as prop from logged-in user
+const TutorSearch = ({ learnerId }) => {
   const [module, setModule] = useState(""); //stores what the user types in the search box
   const [tutors, setTutors] = useState([]);  //stores the list of tutors returned from the Flask
   const [loading, setLoading] = useState(false);   // Controls whether Loading… message shows during API call
   const [error, setError] = useState(""); //stores any error message (like "no tutors found"
 
-  // Iteration 2 additions - for booking functionality
-  // This array stores all the students/learners (for the dropdown)
-  const [students, setStudents] = useState([]);
-  // This stores the ID of the learner who is making the booking
-  const [selectedLearnerId, setSelectedLearnerId] = useState("");
+  // Iteration 3 - Removed learner dropdown, uses learnerId from props
   // This stores the tutor object that was selected for booking
   const [selectedTutor, setSelectedTutor] = useState(null);
   // This boolean controls whether the booking form modal is shown
   const [showBookingForm, setShowBookingForm] = useState(false);
-
-  // Iteration 2 - Fetch students for learner selection
-  useEffect(() => {
-    fetchStudents();
-  }, []);
-
-  // Iteration 2 - Function to fetch students
-  const fetchStudents = async () => {
-    try {
-      const res = await axios.get("http://127.0.0.1:5000/students");
-      setStudents(res.data);
-      if (res.data.length > 0) {
-        setSelectedLearnerId(res.data[0].id.toString());
-      }
-    } catch (error) {
-      console.error("Error fetching students:", error);
-    }
-  };
 
   const handleSearch = async () => {
     //validation ensure user has typed something
@@ -76,10 +55,11 @@ const TutorSearch = () => {
     setLoading(false);
   };
 
-  // Iteration 2 - Function to handle booking a session
+  // Iteration 3 - Function to handle booking a session (uses learnerId from props)
   const handleBookSession = (tutor) => {
-    if (!selectedLearnerId) {
-      setError("Please select a learner first");
+    if (!learnerId) {
+      setError("You must be logged in as a learner to book sessions. Please ensure your account is linked to a student record.");
+      console.error("learnerId is missing:", learnerId);
       return;
     }
     setSelectedTutor(tutor);
@@ -125,26 +105,7 @@ const TutorSearch = () => {
         </h2>
       </div>
 
-      {/* Iteration 2 - Learner selection dropdown */}
-      <div className="card shadow-sm mb-4">
-        <div className="card-body p-4">
-          <label className="form-label fw-semibold mb-3">
-            Select Learner:
-          </label>
-          <select
-            className="form-select"
-            value={selectedLearnerId}
-            onChange={(e) => setSelectedLearnerId(e.target.value)}
-            style={{ maxWidth: "500px" }}
-          >
-            {students.map((student) => (
-              <option key={student.id} value={student.id}>
-                {student.first_name} {student.last_name} ({student.college_email})
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+      {/* Iteration 3 - Removed learner dropdown, uses logged-in user automatically */}
 
       {/* Iteration 2 - Enhanced search input card */}
       <div className="card shadow-sm mb-4">
@@ -214,15 +175,15 @@ const TutorSearch = () => {
       <div className="row g-4">
         {tutors.map((tutor) => (
           <div key={tutor.tutor_id} className="col-md-6 col-lg-4">
-            <div className="card h-100 shadow-sm" style={{ borderTop: "4px solid #4f46e5" }}>
+            <div className="card h-100 shadow-sm" style={{ borderTop: "4px solid #4f46e5", transition: "all 0.3s ease" }}>
               <div className="card-body d-flex flex-column">
                 <div className="d-flex justify-content-between align-items-start mb-3">
-                  <h5 className="card-title mb-0 fw-bold">
+                  <h5 className="card-title mb-0 fw-bold" style={{ color: "#1f2937" }}>
                     {tutor.first_name} {tutor.last_name}
                   </h5>
                   {/* Iteration 2 - Verified badge */}
                   {tutor.verified === 1 && (
-                    <span className="badge bg-success">Verified</span>
+                    <span className="badge bg-success" style={{ fontSize: "0.75rem" }}>✓ Verified</span>
                   )}
                 </div>
 
@@ -285,7 +246,7 @@ const TutorSearch = () => {
           }}></div>
           <BookingForm
             tutor={selectedTutor}
-            learnerId={parseInt(selectedLearnerId)}
+            learnerId={learnerId}
             onClose={() => {
               setShowBookingForm(false);
               setSelectedTutor(null);
