@@ -2,9 +2,10 @@
 // It shows a table with all the tutoring sessions the tutor has scheduled
 
 // Import React and the hooks needed
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 // Import axios for making HTTP requests to the backend
 import axios from "axios";
+import BookingMessages from "./BookingMessages"; // Iteration 4 - Import messaging component
 
 // This component receives tutorId as a prop (passed from the parent component)
 // tutorId: The ID of the tutor whose bookings I want to display
@@ -23,6 +24,13 @@ const TutorBookings = ({ tutorId }) => {
   // This stores any error message I want to show to the user
   // Empty string means no error
   const [error, setError] = useState("");
+  
+  // Iteration 4 - Store action messages and loading states for accept/deny
+  const [actionMessage, setActionMessage] = useState({ type: "", text: "" });
+  const [actionLoadingId, setActionLoadingId] = useState(null);
+  
+  // Iteration 4 - State for showing messages
+  const [showMessagesForBooking, setShowMessagesForBooking] = useState(null);
 
   // FUNCTIONS
 
@@ -61,44 +69,175 @@ const TutorBookings = ({ tutorId }) => {
   // If the user selects a different tutor, it fetches that tutor's bookings
   useEffect(() => {
     fetchBookings();
-  }, [tutorId, fetchBookings]);  // Include both tutorId and fetchBookings in dependencies
+  }, [tutorId, fetchBookings]);
+  
+  // Iteration 4 - Function to accept a booking
+  const handleAcceptBooking = async (bookingId) => {
+    setActionLoadingId(bookingId);
+    setActionMessage({ type: "", text: "" });
+    
+    try {
+      const response = await axios.put(`http://127.0.0.1:5000/api/bookings/${bookingId}/accept`);
+      const successMsg = response.data.message || "Booking accepted successfully!";
+      setActionMessage({ type: "success", text: successMsg });
+      if (window.showToast) {
+        window.showToast(successMsg, "success", 3000);
+      }
+      fetchBookings(); // Refresh the bookings list
+    } catch (error) {
+      const errorMsg = error?.response?.data?.error || error?.message || "Failed to accept booking";
+      setActionMessage({ type: "error", text: errorMsg });
+    } finally {
+      setActionLoadingId(null);
+      // Clear message after 3 seconds
+      setTimeout(() => setActionMessage({ type: "", text: "" }), 3000);
+    }
+  };
+  
+  // Iteration 4 - Function to deny a booking
+  const handleDenyBooking = async (bookingId) => {
+    if (!window.confirm("Are you sure you want to deny this booking?")) {
+      return;
+    }
+    
+    setActionLoadingId(bookingId);
+    setActionMessage({ type: "", text: "" });
+    
+    try {
+      const response = await axios.put(`http://127.0.0.1:5000/api/bookings/${bookingId}/deny`);
+      const successMsg = response.data.message || "Booking denied successfully!";
+      setActionMessage({ type: "success", text: successMsg });
+      if (window.showToast) {
+        window.showToast(successMsg, "success", 3000);
+      }
+      fetchBookings(); // Refresh the bookings list
+    } catch (error) {
+      const errorMsg = error?.response?.data?.error || error?.message || "Failed to deny booking";
+      setActionMessage({ type: "error", text: errorMsg });
+    } finally {
+      setActionLoadingId(null);
+      // Clear message after 3 seconds
+      setTimeout(() => setActionMessage({ type: "", text: "" }), 3000);
+    }
+  };  // Include both tutorId and fetchBookings in dependencies
+
+  // UX Improvement - Calculate quick stats
+  const stats = useMemo(() => {
+    if (!bookings.length) return null;
+    const pending = bookings.filter(b => b.status === 'pending').length;
+    const confirmed = bookings.filter(b => b.status === 'confirmed' || b.status === 'accepted').length;
+    const upcoming = bookings.filter(b => {
+      const bookingDate = new Date(b.session_date);
+      if (b.session_time) {
+        const [hours, minutes] = b.session_time.split(':').map(Number);
+        bookingDate.setHours(hours, minutes);
+      }
+      return bookingDate > new Date() && (b.status === 'confirmed' || b.status === 'accepted');
+    }).length;
+    return { pending, confirmed, upcoming, total: bookings.length };
+  }, [bookings]);
 
   //  - This returns the HTML/JSX that gets displayed
   return (
-    <div className="card shadow-sm">
-      <div className="card-body">
-        {/* Header with title, count, and refresh button */}
-        <div className="d-flex justify-content-between align-items-center mb-4">
-          <div>
-            <h3 className="card-title mb-1 fw-bold">Tutor Bookings</h3>
-            {/* Show booking count if not loading and no error */}
-            {!loading && !error && (
-              <small className="text-muted">
-                {bookings.length} {bookings.length === 1 ? 'booking' : 'bookings'} scheduled
-              </small>
-            )}
+    <div>
+      {/* Professional Dashboard Overview */}
+      {!loading && !error && stats && (
+        <div className="row g-4 mb-5">
+          <div className="col-md-3">
+            <div className="stats-card bg-primary text-white">
+              <div className="value">{stats.total}</div>
+              <div className="label">Total Bookings</div>
+            </div>
           </div>
-          {/* Refresh button to reload the bookings */}
-          <button 
-            className="btn btn-outline-primary btn-sm" 
-            onClick={fetchBookings}  // Call fetchBookings when clicked
-            disabled={loading}  // Disable button while loading
-            title="Refresh bookings"
-          >
-            {/* Show loading spinner if loading, otherwise show "Refresh" */}
-            {loading ? (
-              <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-            ) : (
-              "Refresh"
-            )}
-          </button>
+          <div className="col-md-3">
+            <div className="stats-card bg-success text-white">
+              <div className="value">{stats.confirmed}</div>
+              <div className="label">Confirmed</div>
+            </div>
+          </div>
+          <div className="col-md-3">
+            <div className="stats-card bg-warning text-dark">
+              <div className="value">{stats.pending}</div>
+              <div className="label">Pending</div>
+            </div>
+          </div>
+          <div className="col-md-3">
+            <div className="stats-card bg-info text-white">
+              <div className="value">{stats.upcoming}</div>
+              <div className="label">Upcoming</div>
+            </div>
+          </div>
         </div>
+      )}
 
-        {/* Show loading message if fetching data */}
+      <div className="card">
+        <div className="card-body">
+          {/* Professional Page Header */}
+          <div className="page-header mb-4">
+            <div className="d-flex justify-content-between align-items-start">
+              <div>
+                <h2 className="mb-2">My Bookings</h2>
+                {!loading && !error && (
+                  <p className="text-muted mb-0">
+                    {bookings.length} {bookings.length === 1 ? 'booking' : 'bookings'} scheduled
+                  </p>
+                )}
+              </div>
+              {/* Refresh button */}
+              <button 
+                className="btn btn-outline-primary btn-sm" 
+                onClick={fetchBookings}
+                disabled={loading}
+                title="Refresh bookings"
+              >
+                {loading ? (
+                  <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                ) : (
+                  <>
+                    <i className="bi bi-arrow-clockwise me-2"></i>
+                    Refresh
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+        {/* UX Improvement - Skeleton loader for better loading state */}
         {loading && (
-          <div className="alert alert-info d-flex align-items-center">
-            <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-            Loading bookings...
+          <div>
+            <div className="alert alert-info d-flex align-items-center mb-3">
+              <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+              Loading bookings...
+            </div>
+            {/* Skeleton table */}
+            <div className="table-responsive">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th><div className="skeleton" style={{ height: "20px", width: "80px" }}></div></th>
+                    <th><div className="skeleton" style={{ height: "20px", width: "60px" }}></div></th>
+                    <th><div className="skeleton" style={{ height: "20px", width: "70px" }}></div></th>
+                    <th><div className="skeleton" style={{ height: "20px", width: "100px" }}></div></th>
+                    <th><div className="skeleton" style={{ height: "20px", width: "120px" }}></div></th>
+                    <th><div className="skeleton" style={{ height: "20px", width: "70px" }}></div></th>
+                    <th><div className="skeleton" style={{ height: "20px", width: "100px" }}></div></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[1, 2, 3].map((i) => (
+                    <tr key={i}>
+                      <td><div className="skeleton" style={{ height: "16px", width: "100px" }}></div></td>
+                      <td><div className="skeleton" style={{ height: "16px", width: "60px" }}></div></td>
+                      <td><div className="skeleton" style={{ height: "16px", width: "50px" }}></div></td>
+                      <td><div className="skeleton" style={{ height: "16px", width: "120px" }}></div></td>
+                      <td><div className="skeleton" style={{ height: "16px", width: "150px" }}></div></td>
+                      <td><div className="skeleton" style={{ height: "16px", width: "70px" }}></div></td>
+                      <td><div className="skeleton" style={{ height: "16px", width: "120px" }}></div></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
         
@@ -108,14 +247,36 @@ const TutorBookings = ({ tutorId }) => {
             {error}
           </div>
         )}
+        
+        {/* Iteration 4 - Show action messages (success/error) */}
+        {actionMessage.text && (
+          <div className={`alert alert-${actionMessage.type === "success" ? "success" : "danger"} alert-dismissible fade show`}>
+            {actionMessage.text}
+            <button
+              type="button"
+              className="btn-close"
+              onClick={() => setActionMessage({ type: "", text: "" })}
+              aria-label="Close"
+            ></button>
+          </div>
+        )}
 
-        {/* Show empty state if no bookings found (and not loading and no error) */}
+        {/* UX Improvement - Enhanced empty state */}
         {bookings.length === 0 && !loading && !error ? (
           <div className="text-center py-5">
+            <div className="mb-4" style={{ fontSize: "4rem", opacity: 0.3 }}>
+              <i className="bi bi-calendar-x"></i>
+            </div>
             <h5 className="fw-semibold mb-2">No Bookings Yet</h5>
-            <p className="text-muted mb-0">
-              This tutor doesn't have any scheduled sessions yet.
+            <p className="text-muted mb-4">
+              You don't have any scheduled sessions yet. Once learners book sessions with you, they'll appear here.
             </p>
+            <div className="alert alert-info d-inline-block">
+              <small>
+                <i className="bi bi-info-circle me-1"></i>
+                Make sure your availability is set up so learners can book sessions with you.
+              </small>
+            </div>
           </div>
         ) : (
           /* Show table of bookings if there are any */
@@ -129,12 +290,15 @@ const TutorBookings = ({ tutorId }) => {
                   <th>Learner</th>
                   <th>Email</th>
                   <th>Status</th>
+                  {/* Iteration 4 - Add Actions column for accept/deny */}
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {/* Loop through each booking and create a table row */}
                 {bookings.map((booking) => (
-                  <tr key={booking.booking_id}>
+                  <React.Fragment key={booking.booking_id}>
+                  <tr>
                     {/* Format the date nicely (e.g., "Mon, Jan 15, 2024") */}
                     <td className="align-middle">
                       <strong>{new Date(booking.session_date).toLocaleDateString('en-US', { 
@@ -174,13 +338,76 @@ const TutorBookings = ({ tutorId }) => {
                         {booking.status}
                       </span>
                     </td>
+                    {/* Iteration 4 - Add accept/deny buttons for pending bookings and messages for confirmed */}
+                    <td className="align-middle">
+                      {booking.status === "pending" ? (
+                        <div className="btn-group btn-group-sm" role="group">
+                          <button
+                            type="button"
+                            className="btn btn-success"
+                            onClick={() => handleAcceptBooking(booking.booking_id)}
+                            disabled={actionLoadingId === booking.booking_id}
+                            title="Accept this booking"
+                          >
+                            {actionLoadingId === booking.booking_id ? (
+                              <span className="spinner-border spinner-border-sm" role="status"></span>
+                            ) : (
+                              "Accept"
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-danger"
+                            onClick={() => handleDenyBooking(booking.booking_id)}
+                            disabled={actionLoadingId === booking.booking_id}
+                            title="Deny this booking"
+                          >
+                            {actionLoadingId === booking.booking_id ? (
+                              <span className="spinner-border spinner-border-sm" role="status"></span>
+                            ) : (
+                              "Deny"
+                            )}
+                          </button>
+                        </div>
+                      ) : (booking.status === "confirmed" || booking.status === "accepted") ? (
+                        <button
+                          className="btn btn-sm btn-outline-info"
+                          onClick={() => setShowMessagesForBooking(
+                            showMessagesForBooking === booking.booking_id ? null : booking.booking_id
+                          )}
+                          title="View messages"
+                        >
+                          {showMessagesForBooking === booking.booking_id ? "Hide Messages" : "Messages"}
+                        </button>
+                      ) : (
+                        <span className="text-muted">-</span>
+                      )}
+                    </td>
                   </tr>
+                  
+                  {/* Iteration 4 - Messages row (only shown for the selected booking) */}
+                  {showMessagesForBooking === booking.booking_id && (
+                    <tr>
+                      <td colSpan="7" className="p-0">
+                        <div className="p-3">
+                          <BookingMessages
+                            bookingId={booking.booking_id}
+                            userId={tutorId}
+                            userRole="tutor"
+                            bookingStatus={booking.status}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
           </div>
         )}
       </div>
+    </div>
     </div>
   );
 };

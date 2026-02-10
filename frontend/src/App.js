@@ -16,6 +16,14 @@ import LearnerBookings from "./components/LearnerBookings"; // Component to show
 import Login from "./components/Login"; // Login component
 import Register from "./components/Register"; // Register component
 import TutorProfileEdit from "./components/TutorProfileEdit"; // Tutor profile edit component
+// Iteration 4 additions
+import TutorAvailability from "./components/TutorAvailability"; // Tutor availability management component
+import CalendarView from "./components/CalendarView"; // Calendar view component for bookings
+import LandingPage from "./components/LandingPage"; // Landing page component
+import ToastContainer from "./components/ToastContainer"; // Toast notification container
+import MessagesView from "./components/MessagesView"; // Messages view component
+import LearnerSpending from "./components/LearnerSpending"; // UX Improvement - Learner spending/payment history component
+import TutorEarnings from "./components/TutorEarnings"; // Tutor earnings component
 // Import the custom CSS file for styling
 import "./App.css";
 
@@ -44,15 +52,17 @@ function App() {
 
   // Iteration 3 - auth state
   const [currentUser, setCurrentUser] = useState(null);
-  const [authPage, setAuthPage] = useState('login');
+  const [authPage, setAuthPage] = useState(null); // Iteration 4 - null means show landing page
 
   // STUDENT SYSTEM STATE + LOGIC
   // reference , https://www.w3schools.com/REACT/react_usestate.asp
   const [students, setStudents] = useState([]); //stores the current list of students fetched from backend  
 
   // Iteration 2 addition  for tutor bookings dropdown
+  // NOTE: Currently unused - kept for potential future use
   // This array stores all the tutors (used for the tutor bookings dropdown)
   // It starts as an empty array 
+  // eslint-disable-next-line no-unused-vars
   const [tutors, setTutors] = useState([]);
 
   const [formData, setFormData] = useState({   //holds what the user types in the forms
@@ -96,14 +106,14 @@ function App() {
       // Admin sees: Admin Dashboard
       basePages.push('admin');
     } else if (role === 'tutor') {
-      // Tutor sees: Tutor Signup (if not linked), Tutor Bookings, Edit Profile
+      // Iteration 4 - Tutor sees: Tutor Signup (if not linked), Tutor Bookings, Calendar, Availability, Edit Profile, Messages, Earnings
       if (!currentUser.tutor_id) {
         basePages.push('signup');  // Show signup if tutor profile not linked
       }
-      basePages.push('tutor-bookings', 'tutor-profile-edit');
+      basePages.push('tutor-bookings', 'tutor-calendar', 'tutor-availability', 'tutor-profile-edit', 'messages', 'tutor-earnings');
     } else if (role === 'learner') {
-      // Learner sees: Tutor Search, My Bookings
-      basePages.push('tutors', 'learner-bookings');
+      // UX Improvement - Learner sees: Tutor Search, My Bookings, Calendar, Messages, Payment History
+      basePages.push('tutors', 'learner-bookings', 'learner-calendar', 'messages', 'payment-history');
     }
     
     return basePages;
@@ -128,25 +138,27 @@ function App() {
   };
 
   // Iteration 3 - Handle logout
+  // Iteration 4 - Modified to return to landing page
   // file reference: https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage (lines 131-137)
   const handleLogout = () => {
     setCurrentUser(null);
     localStorage.removeItem('currentUser');
     setCurrentPage(null);
-    setAuthPage('login');
+    setAuthPage(null); // Iteration 4 - Return to landing page
   };
 
   const API_URL = "http://localhost:5000/students"; // Flask backend API URL // defines backend endpoint, allows to call flask from react and modify DB
 
   // Iteration 3 - check for stored user on mount
+  // Iteration 4 - Modified to show landing page instead of login
   // file reference: https://react.dev/reference/react/useEffect (lines 141-150)
   // file reference: https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage (lines 141-150)
   useEffect(() => {
-    // Don't auto-restore user session - always start at login page
+    // Don't auto-restore user session - always start at landing page
     // User must log in fresh on each page reload
     setCurrentUser(null);
-    setCurrentPage(null); // Always show login page
-    setAuthPage('login'); // Show login form
+    setCurrentPage(null); // Always show landing page
+    setAuthPage(null); // Iteration 4 - null means show landing page
     setInitialUserCheck(true);
   }, []);
 
@@ -179,7 +191,9 @@ function App() {
   };
 
   // Iteration 2 addition - fetch tutors for bookings dropdown
+  // NOTE: Currently unused - kept for potential future use
   // This function gets all verified tutors from the backend API
+  // eslint-disable-next-line no-unused-vars
   const fetchTutors = async () => {
     try {
       // Make a GET request to the backend to get all verified tutors
@@ -301,6 +315,7 @@ function App() {
 
 
   // Iteration 3 - show login/register if not logged in
+  // Iteration 4 - Modified to show landing page first, then login/register when clicked
   // file reference: https://react.dev/reference/react (conditional rendering - lines 301-330)
   if (!currentUser) {
     // Allow tutor signup page if user just registered as tutor
@@ -311,9 +326,32 @@ function App() {
         </div>
       );
     }
+    
+    // Iteration 4 - Show landing page if authPage is null
+    if (authPage === null) {
+      return (
+        <LandingPage 
+          onShowLogin={() => setAuthPage('login')}
+          onShowRegister={() => setAuthPage('register')}
+        />
+      );
+    }
+    
+    // Show login or register form
     return (
       <div className="container-fluid py-4" style={{ minHeight: "100vh", backgroundColor: "#f8f9fa" }}>
         <div className="container">
+          {/* Iteration 4 - Back to landing page button */}
+          <div className="mb-3">
+            <button 
+              className="btn btn-link text-muted p-0" 
+              onClick={() => setAuthPage(null)}
+              style={{ textDecoration: 'none' }}
+            >
+              ← Back to Home
+            </button>
+          </div>
+          
           {authPage === 'register' ? (
             <Register onRegisterSuccess={handleRegisterSuccess} />
           ) : (
@@ -352,16 +390,29 @@ function App() {
 
   return (
     // Iteration 2 - Enhanced container with Bootstrap styling
-    <div className="container-fluid py-4" style={{ minHeight: "100vh" }}>
-      {/* Iteration 2 - Navigation bar with logo */}
-      <nav className="navbar navbar-expand-lg navbar-light bg-white mb-4 rounded shadow-sm">
+    // Iteration 5 - Added gradient background for logged-in users
+    <div className="container-fluid py-4 app-gradient-background">
+      {/* Iteration 4 - Toast notifications container */}
+      <ToastContainer />
+      {/* Professional Navigation Bar */}
+      <nav className="navbar navbar-expand-lg mb-4">
         <div className="container-fluid">
-          {/* Iteration 2 - Brand/logo with clickable home navigation */}
-          <span 
-            className="navbar-brand fw-bold d-flex align-items-center" 
-            style={{ cursor: 'pointer', padding: '0.5rem 0' }} 
+          {/* Brand */}
+          <div 
+            className="navbar-brand d-flex align-items-center"
+            style={{ 
+              cursor: 'pointer',
+              padding: '0.5rem 1rem',
+              borderRadius: '0.75rem',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--gray-50)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
             onClick={() => {
-              // Navigate to first available page for user role
               if (availablePages.length > 0) {
                 setCurrentPage(availablePages[0]);
               }
@@ -370,56 +421,72 @@ function App() {
             <img 
               src="/logo.png" 
               alt="StudyHive Logo" 
-              className="logo-navbar"
+              className="logo-navbar me-2"
+              style={{ height: "42px" }}
               onError={(e) => {
-                // If logo image doesn't exist, fall back to text
                 e.target.style.display = 'none';
-                e.target.nextSibling.style.display = 'inline';
               }}
             />
-            <span style={{ display: 'none' }}>StudyHive</span>
+            <span className="d-none d-md-inline fw-bold" style={{ fontSize: "1.5rem", color: "var(--primary)" }}>
+              StudyHive
           </span>
-          {/* Iteration 3 - Role-based navigation buttons */}
-          {/* file reference: https://react.dev/reference/react/useMemo (lines 379-410) */}
-          {/* file reference: https://getbootstrap.com/docs/5.3/ (lines 379-410) */}
-          <div className="navbar-nav flex-row flex-wrap align-items-center">
-            {/* User info and logout */}
-            <span className="me-3 mb-2 text-muted small">
-              Logged in as: <strong className="text-dark">{currentUser.email}</strong> <span className="badge bg-secondary ms-1">{currentUser.role}</span>
-            </span>
+          </div>
+          
+          {/* Navigation */}
+          <div className="d-flex align-items-center flex-wrap gap-2">
+            <div className="navbar-nav flex-row align-items-center me-3">
+              {availablePages.map((page) => {
+                const pageLabels = {
+                  "tutors": { label: "Tutor Search", icon: "bi-search" },
+                  "admin": { label: "Admin Dashboard", icon: "bi-speedometer2" },
+                  "learner-bookings": { label: "My Bookings", icon: "bi-calendar-check" },
+                  "tutor-bookings": { label: "My Bookings", icon: "bi-calendar-check" },
+                  "learner-calendar": { label: "Calendar", icon: "bi-calendar3" },
+                  "tutor-calendar": { label: "Calendar", icon: "bi-calendar3" },
+                  "tutor-availability": { label: "Availability", icon: "bi-clock" },
+                  "tutor-profile-edit": { label: "Edit Profile", icon: "bi-person-gear" },
+                  "messages": { label: "Messages", icon: "bi-chat-dots" },
+                  "payment-history": { label: "Payment History", icon: "bi-receipt" },
+                  "tutor-earnings": { label: "Earnings", icon: "bi-cash-coin" }
+                };
+                const pageInfo = pageLabels[page] || { label: page, icon: "bi-circle" };
+                
+                return (
             <button
-              onClick={handleLogout}
-              className="btn btn-outline-danger me-2 mb-2"
-              style={{ minWidth: "100px", fontSize: "0.9rem" }}
-            >
-              Logout
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`btn btn-nav ${currentPage === page ? "btn-nav-active" : ""}`}
+                  >
+                    <i className={`bi ${pageInfo.icon} me-2`}></i>
+                    <span className="d-none d-lg-inline">{pageInfo.label}</span>
+                    <span className="d-lg-none">{pageInfo.label.split(' ')[0]}</span>
             </button>
+                );
+              })}
+            </div>
             
-            {/* Iteration 3 - Show only pages available for current user role */}
-            {/* file reference: https://react.dev/reference/react/useMemo (lines 393-410) */}
-            {availablePages.map((page) => (
+            {/* User Info */}
+            <div className="d-flex align-items-center border-start ps-3 ms-3" style={{ borderColor: "var(--gray-200)" }}>
+              <div className="d-flex flex-column align-items-end me-3 d-none d-md-flex">
+                <small className="text-muted" style={{ fontSize: "0.75rem", fontWeight: "500" }}>
+                  {currentUser.email.split('@')[0]}
+                </small>
+                <span className={`badge mt-1 ${
+                  currentUser.role === 'admin' ? 'bg-danger' :
+                  currentUser.role === 'tutor' ? 'bg-primary' :
+                  'bg-info'
+                }`} style={{ fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  {currentUser.role}
+                </span>
+              </div>
               <button
-                key={page}
-                onClick={() => setCurrentPage(page)}
-                className={`btn btn-nav me-2 mb-2 ${currentPage === page ? "btn-nav-active" : ""}`}
-                style={{ 
-                  minWidth: "120px",
-                  fontSize: "0.9rem"
-                }}
+                onClick={handleLogout}
+                className="btn btn-outline-danger btn-sm"
               >
-                {page === "tutors"
-                  ? "Tutor Search"
-                  : page === "admin"
-                  ? "Admin Dashboard"
-                  : page === "learner-bookings"
-                  ? "My Bookings"
-                  : page === "tutor-bookings"
-                  ? "My Bookings"
-                  : page === "tutor-profile-edit"
-                  ? "Edit Profile"
-                  : page}
+                <i className="bi bi-box-arrow-right me-1"></i>
+                <span className="d-none d-sm-inline">Logout</span>
               </button>
-            ))}
+            </div>
           </div>
         </div>
       </nav>
@@ -617,6 +684,21 @@ function App() {
       {/* file reference: https://react.dev/reference/react (conditional rendering - line 628) */}
       {currentPage === "admin" && currentUser?.role === 'admin' && <AdminDashboard />}
 
+      {/* Iteration 4 - Tutor Availability Management Page - Only for tutors */}
+      {currentPage === "tutor-availability" && currentUser?.role === 'tutor' && (
+        <div className="container">
+          {currentUser?.tutor_id ? (
+            <TutorAvailability tutorId={currentUser.tutor_id} />
+          ) : (
+            <div className="alert alert-warning">
+              <strong>Account Setup Required:</strong> Your tutor account is not linked to a tutor profile. 
+              <br />
+              Please complete the tutor signup form first.
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Iteration 3 - Tutor Profile Edit Page - Only for tutors */}
       {/* file reference: https://react.dev/reference/react (conditional rendering - lines 630-650) */}
       {currentPage === "tutor-profile-edit" && currentUser?.role === 'tutor' && (
@@ -681,6 +763,140 @@ function App() {
           ) : (
             <div className="alert alert-warning">
               <strong>Note:</strong> Your account is not linked to a student record. Please contact an administrator.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Iteration 4 - Learner Calendar page */}
+      {currentPage === "learner-calendar" && currentUser?.role === 'learner' && (
+        <div className="container">
+          {currentUser?.student_id ? (
+            <CalendarView userId={currentUser.student_id} role="learner" />
+          ) : (
+            <div className="alert alert-warning">
+              <strong>Account Setup Required:</strong> Your learner account is not linked to a student profile.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* UX Improvement - Learner Payment History page */}
+      {currentPage === "payment-history" && currentUser?.role === 'learner' && (
+        <div className="container">
+          <div className="text-center mb-4">
+            <div className="mb-3">
+              <img
+                src="/logo.png"
+                alt="StudyHive Logo"
+                className="logo-page-header"
+                style={{
+                  height: "80px",
+                  objectFit: "contain"
+                }}
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                }}
+              />
+            </div>
+            <h2 className="mb-4 fw-bold" style={{ fontSize: "1.75rem" }}>
+              Payment History
+            </h2>
+          </div>
+          {currentUser?.student_id ? (
+            <LearnerSpending learnerId={currentUser.student_id} />
+          ) : (
+            <div className="alert alert-warning">
+              <strong>Note:</strong> Your account is not linked to a student record. Please contact an administrator.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Iteration 4 - Tutor Earnings page */}
+      {currentPage === "tutor-earnings" && currentUser?.role === 'tutor' && (
+        <div className="container">
+          <div className="text-center mb-4">
+            <div className="mb-3">
+              <img
+                src="/logo.png"
+                alt="StudyHive Logo"
+                className="logo-page-header"
+                style={{
+                  height: "80px",
+                  objectFit: "contain"
+                }}
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                }}
+              />
+            </div>
+            <h2 className="mb-4 fw-bold" style={{ fontSize: "1.75rem" }}>
+              My Earnings
+            </h2>
+          </div>
+          {currentUser?.tutor_id ? (
+            <TutorEarnings tutorId={currentUser.tutor_id} />
+          ) : (
+            <div className="alert alert-warning">
+              <strong>Note:</strong> Your tutor account is not linked to a tutor profile. Please complete the tutor signup form.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Iteration 4 - Tutor Calendar page */}
+      {currentPage === "tutor-calendar" && currentUser?.role === 'tutor' && (
+        <div className="container">
+          {currentUser?.tutor_id ? (
+            <CalendarView userId={currentUser.tutor_id} role="tutor" />
+          ) : (
+            <div className="alert alert-warning">
+              <strong>Account Setup Required:</strong> Your tutor account is not linked to a tutor profile.
+              <br />
+              Please complete the tutor signup form first.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Iteration 4 - Messages page - For both learners and tutors */}
+      {currentPage === "messages" && currentUser && (
+        <div className="container">
+          <div className="text-center mb-4">
+            <div className="mb-3">
+              <img
+                src="/logo.png"
+                alt="StudyHive Logo"
+                className="logo-page-header"
+                style={{
+                  height: "80px",
+                  objectFit: "contain"
+                }}
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                }}
+              />
+            </div>
+            <h2 className="mb-4 fw-bold" style={{ fontSize: "1.75rem" }}>
+              Messages
+            </h2>
+          </div>
+          {currentUser.role === 'learner' && currentUser.student_id && (
+            <MessagesView userId={currentUser.student_id} userRole="learner" />
+          )}
+          {currentUser.role === 'tutor' && currentUser.tutor_id && (
+            <MessagesView userId={currentUser.tutor_id} userRole="tutor" />
+          )}
+          {/* Show warning if user is not linked to a profile */}
+          {currentUser.role === 'learner' && !currentUser.student_id && (
+            <div className="alert alert-warning">
+              <strong>Note:</strong> Your account is not linked to a student record. Please contact an administrator.
+            </div>
+          )}
+          {currentUser.role === 'tutor' && !currentUser.tutor_id && (
+            <div className="alert alert-warning">
+              <strong>Note:</strong> Your tutor account is not linked to a tutor profile. Please complete the tutor signup form.
             </div>
           )}
         </div>

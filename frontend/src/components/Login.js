@@ -56,6 +56,9 @@ const Login = ({ onLoginSuccess }) => {
       }
       
       setMessage({ type: "success", text: "Login successful! Redirecting..." });
+      if (window.showToast) {
+        window.showToast("Login successful! Welcome back.", "success", 2000);
+      }
     } catch (error) {
       const errorMessage =
         error?.response?.data?.error ||

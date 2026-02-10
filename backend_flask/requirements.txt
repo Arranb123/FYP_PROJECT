@@ -6,6 +6,20 @@ flask==3.0.0
 # communicate with your Flask backend even though they run on different ports (3000 vs 5000).
 flask-cors==4.0.0
 
+# Google Calendar API for booking calendar integration
+google-api-python-client==2.108.0
+google-auth-httplib2==0.1.1
+google-auth-oauthlib==1.1.0
+
+# Email API - SendGrid for sending booking confirmations and reminders
+sendgrid==6.11.0
+
+# Requests library for making HTTP requests to external APIs
+requests==2.31.0
+
+# Timezone support
+pytz==2024.1
+
 # Note: sqlite3, datetime, and pathlib are built-in Python modules
 # No need to install them separately
 

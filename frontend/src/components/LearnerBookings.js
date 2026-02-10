@@ -9,8 +9,9 @@
 // file references: https://www.w3schools.com/react/react_forms.asp (lines 423-470)
 // file references: https://getbootstrap.com/docs/5.3/ (lines 391-404, 423-470)
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import axios from "axios";
+import BookingMessages from "./BookingMessages"; // Iteration 4 - Import messaging component
 
 const LearnerBookings = ({ learnerId }) => {
   
@@ -32,6 +33,9 @@ const LearnerBookings = ({ learnerId }) => {
     comment: "",
   });
   const [reviewedBookings, setReviewedBookings] = useState(new Set());
+  
+  // Iteration 4 - State for showing messages
+  const [showMessagesForBooking, setShowMessagesForBooking] = useState(null);
 
   // Story 10 - fetch bookings
   const fetchBookings = useCallback(async () => {
@@ -245,41 +249,122 @@ const LearnerBookings = ({ learnerId }) => {
     }
   }, [bookings, checkExistingReviews]);
 
+  // UX Improvement - Calculate quick stats
+  const stats = useMemo(() => {
+    if (!bookings.length) return null;
+    const pending = bookings.filter(b => b.status === 'pending').length;
+    const confirmed = bookings.filter(b => b.status === 'confirmed' || b.status === 'accepted').length;
+    const upcoming = bookings.filter(b => {
+      const bookingDate = new Date(b.session_date);
+      if (b.session_time) {
+        const [hours, minutes] = b.session_time.split(':').map(Number);
+        bookingDate.setHours(hours, minutes);
+      }
+      return bookingDate > new Date() && (b.status === 'confirmed' || b.status === 'accepted');
+    }).length;
+    return { pending, confirmed, upcoming, total: bookings.length };
+  }, [bookings]);
+
   return (
-    <div className="card shadow-sm">
-      <div className="card-body">
-        {/* Header with title, count, and refresh button */}
-        <div className="d-flex justify-content-between align-items-center mb-4">
-          <div>
-            <h3 className="card-title mb-1 fw-bold">My Bookings</h3>
-            {/* Show booking count if not loading and no error */}
-            {!loading && !error && (
-              <small className="text-muted">
-                {bookings.length} {bookings.length === 1 ? 'booking' : 'bookings'} found
-              </small>
-            )}
+    <div>
+      {/* Professional Dashboard Overview */}
+      {!loading && !error && stats && (
+        <div className="row g-4 mb-5">
+          <div className="col-md-3">
+            <div className="stats-card bg-primary text-white">
+              <div className="value">{stats.total}</div>
+              <div className="label">Total Bookings</div>
+            </div>
           </div>
-          {/* Refresh button to reload the bookings */}
-          <button 
-            className="btn btn-outline-primary btn-sm" 
-            onClick={fetchBookings}  // Call fetchBookings when clicked
-            disabled={loading}  // Disable button while loading
-            title="Refresh bookings"
-          >
-            {/* Show loading spinner if loading, otherwise show "Refresh" */}
-            {loading ? (
-              <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-            ) : (
-              "Refresh"
-            )}
-          </button>
+          <div className="col-md-3">
+            <div className="stats-card bg-success text-white">
+              <div className="value">{stats.confirmed}</div>
+              <div className="label">Confirmed</div>
+            </div>
+          </div>
+          <div className="col-md-3">
+            <div className="stats-card bg-warning text-dark">
+              <div className="value">{stats.pending}</div>
+              <div className="label">Pending</div>
+            </div>
+          </div>
+          <div className="col-md-3">
+            <div className="stats-card bg-info text-white">
+              <div className="value">{stats.upcoming}</div>
+              <div className="label">Upcoming</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+    <div className="card">
+      <div className="card-body">
+          {/* Professional Page Header */}
+        <div className="page-header mb-4">
+          <div className="d-flex justify-content-between align-items-start">
+            <div>
+              <h2 className="mb-2">My Bookings</h2>
+              {!loading && !error && (
+                <p className="text-muted mb-0">
+                  {bookings.length} {bookings.length === 1 ? 'booking' : 'bookings'} total
+                </p>
+              )}
+            </div>
+            {/* Refresh button */}
+            <button 
+              className="btn btn-outline-primary btn-sm" 
+              onClick={fetchBookings}
+              disabled={loading}
+              title="Refresh bookings"
+            >
+              {loading ? (
+                <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+              ) : (
+                <>
+                  <i className="bi bi-arrow-clockwise me-2"></i>
+                  Refresh
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
-        {/* Show loading message if fetching data */}
+        {/* UX Improvement - Skeleton loader for better loading state */}
         {loading && (
-          <div className="alert alert-info d-flex align-items-center">
+          <div>
+            <div className="alert alert-info d-flex align-items-center mb-3">
             <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
             Loading bookings...
+            </div>
+            {/* Skeleton table */}
+            <div className="table-responsive">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th><div className="skeleton" style={{ height: "20px", width: "80px" }}></div></th>
+                    <th><div className="skeleton" style={{ height: "20px", width: "60px" }}></div></th>
+                    <th><div className="skeleton" style={{ height: "20px", width: "70px" }}></div></th>
+                    <th><div className="skeleton" style={{ height: "20px", width: "100px" }}></div></th>
+                    <th><div className="skeleton" style={{ height: "20px", width: "80px" }}></div></th>
+                    <th><div className="skeleton" style={{ height: "20px", width: "70px" }}></div></th>
+                    <th><div className="skeleton" style={{ height: "20px", width: "100px" }}></div></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[1, 2, 3].map((i) => (
+                    <tr key={i}>
+                      <td><div className="skeleton" style={{ height: "16px", width: "100px" }}></div></td>
+                      <td><div className="skeleton" style={{ height: "16px", width: "60px" }}></div></td>
+                      <td><div className="skeleton" style={{ height: "16px", width: "50px" }}></div></td>
+                      <td><div className="skeleton" style={{ height: "16px", width: "120px" }}></div></td>
+                      <td><div className="skeleton" style={{ height: "16px", width: "80px" }}></div></td>
+                      <td><div className="skeleton" style={{ height: "16px", width: "70px" }}></div></td>
+                      <td><div className="skeleton" style={{ height: "16px", width: "150px" }}></div></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
         
@@ -303,13 +388,28 @@ const LearnerBookings = ({ learnerId }) => {
           </div>
         )}
 
-        {/* Show empty state if no bookings found (and not loading and no error) */}
+        {/* UX Improvement - Enhanced empty state */}
         {bookings.length === 0 && !loading && !error ? (
           <div className="text-center py-5">
+            <div className="mb-4" style={{ fontSize: "4rem", opacity: 0.3 }}>
+              <i className="bi bi-calendar-x"></i>
+            </div>
             <h5 className="fw-semibold mb-2">No Bookings Yet</h5>
-            <p className="text-muted mb-0">
-              You haven't booked any tutoring sessions yet. Start searching for tutors!
+            <p className="text-muted mb-4">
+              You haven't booked any tutoring sessions yet. Start searching for tutors to get started!
             </p>
+            <button 
+              className="btn btn-primary"
+              onClick={() => {
+                // Navigate to tutor search if available
+                if (window.location.pathname.includes('/tutors') === false) {
+                  window.dispatchEvent(new CustomEvent('navigate', { detail: 'tutors' }));
+                }
+              }}
+            >
+              <i className="bi bi-search me-2"></i>
+              Search for Tutors
+            </button>
           </div>
         ) : (
           /* Show table of bookings if there are any */
@@ -385,6 +485,18 @@ const LearnerBookings = ({ learnerId }) => {
                           {/* Story 12 - Show "Reviewed" badge if review exists */}
                           {reviewedBookings.has(booking.booking_id) && (
                             <span className="badge bg-success">Reviewed</span>
+                          )}
+                          {/* Iteration 4 - Messages button for confirmed bookings */}
+                          {(booking.status === "confirmed" || booking.status === "accepted") && (
+                            <button
+                              className="btn btn-sm btn-outline-info"
+                              onClick={() => setShowMessagesForBooking(
+                                showMessagesForBooking === booking.booking_id ? null : booking.booking_id
+                              )}
+                              title="View messages"
+                            >
+                              {showMessagesForBooking === booking.booking_id ? "Hide Messages" : "Messages"}
+                            </button>
                           )}
                           <button
                             className="btn btn-sm btn-outline-secondary"
@@ -476,6 +588,22 @@ const LearnerBookings = ({ learnerId }) => {
                       </tr>
                     )}
 
+                    {/* Iteration 4 - Messages row (only shown for the selected booking) */}
+                    {showMessagesForBooking === booking.booking_id && (
+                      <tr>
+                        <td colSpan="7" className="p-0">
+                          <div className="p-3">
+                            <BookingMessages
+                              bookingId={booking.booking_id}
+                              userId={learnerId}
+                              userRole="learner"
+                              bookingStatus={booking.status}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+
                     {/* Reschedule form row (only shown for the selected booking) */}
                     {rescheduleBookingId === booking.booking_id && (
                       <tr className="bg-light">
@@ -544,6 +672,7 @@ const LearnerBookings = ({ learnerId }) => {
             </table>
           </div>
         )}
+      </div>
       </div>
     </div>
   );

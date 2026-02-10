@@ -31,6 +31,32 @@ function AdminDashboard() {
   // file reference: https://react.dev/reference/react/useState (lines 33-34, 180-193, 246-294)
   const [viewingDocument, setViewingDocument] = useState(null);
 
+  // Iteration 4 - Platform report state
+  const [report, setReport] = useState(null);
+  const [loadingReport, setLoadingReport] = useState(false);
+  const [reportError, setReportError] = useState("");
+
+  // UX Improvement - Admin section navigation state
+  const [activeSection, setActiveSection] = useState('pending-tutors'); // Default to pending tutors
+  
+  // Iteration 4 - User management state
+  const [users, setUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [usersError, setUsersError] = useState("");
+  
+  // UX Improvement - Handle section change and fetch data if needed
+  const handleSectionChange = (section) => {
+    setActiveSection(section);
+    // Fetch users when User Management section is selected
+    if (section === 'user-management' && users.length === 0) {
+      fetchUsers();
+    }
+    // Generate report when Platform Report section is selected
+    if (section === 'platform-report' && !report) {
+      generateReport();
+    }
+  };
+
   // Fetch unverified tutors on load
   useEffect(() => {
     fetchTutors();
@@ -73,6 +99,71 @@ function AdminDashboard() {
     }
   };
 
+  // Iteration 4 - Generate platform report
+  const generateReport = async () => {
+    setLoadingReport(true);
+    setReportError("");
+    try {
+      const response = await axios.get("http://127.0.0.1:5000/api/admin/report");
+      setReport(response.data);
+    } catch (error) {
+      setReportError("Failed to generate report. Please try again.");
+      console.error("Error generating report:", error);
+    } finally {
+      setLoadingReport(false);
+    }
+  };
+
+  // Iteration 4 - Export report as JSON
+  const exportReport = () => {
+    if (!report) return;
+    const dataStr = JSON.stringify(report, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `platform-report-${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Iteration 4 - Fetch all users for management
+  const fetchUsers = async () => {
+    setLoadingUsers(true);
+    setUsersError("");
+    try {
+      const response = await axios.get("http://127.0.0.1:5000/api/admin/users");
+      setUsers(response.data);
+    } catch (error) {
+      setUsersError(error?.response?.data?.error || "Failed to load users. Please try again.");
+      console.error("Error fetching users:", error);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  // Iteration 4 - Update user status (activate/deactivate)
+  const updateUserStatus = async (userId, isActive) => {
+    try {
+      const response = await axios.put(`http://127.0.0.1:5000/api/admin/users/${userId}/status`, {
+        is_active: isActive
+      });
+      
+      if (window.showToast) {
+        window.showToast(response.data.message, "success", 3000);
+      }
+      
+      // Refresh users list
+      fetchUsers();
+    } catch (error) {
+      const errorMsg = error?.response?.data?.error || "Failed to update user status";
+      if (window.showToast) {
+        window.showToast(errorMsg, "error", 4000);
+      }
+      console.error("Error updating user status:", error);
+    }
+  };
+
 // Reference:
   // W3Schools (2025) "React JSX" — https://www.w3schools.com
   // Uses React JSX to mix HTML, JS, and CSS dynamically.
@@ -82,59 +173,122 @@ function AdminDashboard() {
  //used for: UI styling, responsive layout, modals, buttons, cards, and other components throughout the frontend
 
   return (
-    // Iteration 2 - Enhanced container with Bootstrap styling
-    <div className="container">
-      {/* Iteration 2 - Page header with logo */}
-      <div className="mb-4">
-        <div className="text-center mb-3">
-          <img 
-            src="/logo.png" 
-            alt="StudyHive Logo" 
-            className="logo-page-header"
-            style={{ 
-              height: "70px", 
-              objectFit: "contain"
-            }} 
-            onError={(e) => {
-              // If logo doesn't load, hide it
-              e.target.style.display = 'none';
-            }}
-          />
-        </div>
-        <div className="d-flex justify-content-between align-items-center">
+    <div className="container py-4">
+      {/* Professional Header */}
+      <div className="page-header mb-5">
+        <div className="d-flex justify-content-between align-items-start">
           <div>
-            <h1 className="mb-2 fw-bold" style={{ fontSize: "2rem" }}>
-              Admin Dashboard
-            </h1>
-            {/* Iteration 2 - Subtitle */}
-            <p className="text-muted mb-0">Tutor Verification & Management</p>
+            <h1 className="mb-2">Admin Dashboard</h1>
+            <p className="text-muted mb-0">Manage your platform and users</p>
           </div>
-          {/* Iteration 2 - Badge showing pending count */}
-          {tutors.length > 0 && (
-            <span className="badge bg-warning text-dark" style={{ fontSize: "1rem", padding: "0.5rem 1rem" }}>
-              {tutors.length} Pending {tutors.length === 1 ? 'Application' : 'Applications'}
-            </span>
+          {activeSection === 'platform-report' && (
+            <button
+              className="btn btn-outline-primary btn-sm"
+              onClick={generateReport}
+              disabled={loadingReport}
+            >
+              {loadingReport ? (
+                <span className="spinner-border spinner-border-sm"></span>
+              ) : (
+                <>
+                  <i className="bi bi-arrow-clockwise me-2"></i>
+                  Refresh Report
+                </>
+              )}
+            </button>
           )}
         </div>
       </div>
 
-      {/* Iteration 2 - Enhanced empty state */}
+      {/* Professional Navigation Tabs */}
+      <div className="card mb-4">
+        <div className="card-body p-0">
+          <ul className="nav nav-tabs nav-justified" role="tablist">
+            <li className="nav-item" role="presentation">
+              <button
+                className={`nav-link ${activeSection === 'pending-tutors' ? 'active' : ''}`}
+                onClick={() => handleSectionChange('pending-tutors')}
+                type="button"
+              >
+                <i className="bi bi-person-check me-2"></i>
+                Pending Tutors
+                {tutors.length > 0 && (
+                  <span className="badge bg-warning text-dark ms-2">{tutors.length}</span>
+                )}
+              </button>
+            </li>
+            <li className="nav-item" role="presentation">
+              <button
+                className={`nav-link ${activeSection === 'all-bookings' ? 'active' : ''}`}
+                onClick={() => handleSectionChange('all-bookings')}
+                type="button"
+              >
+                <i className="bi bi-calendar-check me-2"></i>
+                All Bookings
+              </button>
+            </li>
+            <li className="nav-item" role="presentation">
+              <button
+                className={`nav-link ${activeSection === 'all-reviews' ? 'active' : ''}`}
+                onClick={() => handleSectionChange('all-reviews')}
+                type="button"
+              >
+                <i className="bi bi-star me-2"></i>
+                All Reviews
+              </button>
+            </li>
+            <li className="nav-item" role="presentation">
+              <button
+                className={`nav-link ${activeSection === 'user-management' ? 'active' : ''}`}
+                onClick={() => handleSectionChange('user-management')}
+                type="button"
+              >
+                <i className="bi bi-people me-2"></i>
+                User Management
+              </button>
+            </li>
+            <li className="nav-item" role="presentation">
+              <button
+                className={`nav-link ${activeSection === 'platform-report' ? 'active' : ''}`}
+                onClick={() => handleSectionChange('platform-report')}
+                type="button"
+              >
+                <i className="bi bi-graph-up me-2"></i>
+                Platform Report
+              </button>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      {/* Error Messages */}
+      {reportError && (
+        <div className="alert alert-danger mb-3">{reportError}</div>
+      )}
+
+      {/* Content Sections - Only show active section */}
+      <div className="tab-content">
+        {/* Pending Tutor Applications */}
+        {activeSection === 'pending-tutors' && (
+          <div className="card">
+            <div className="card-body">
+              <div className="page-header mb-4">
+                <h3 className="mb-0">
+                  <i className="bi bi-person-check me-2"></i>
+                  Pending Tutor Applications
+                </h3>
+              </div>
       {tutors.length === 0 ? (
-        <div className="card shadow-sm">
-          <div className="card-body text-center py-5">
-            <h5 className="fw-semibold mb-2">All Clear!</h5>
-            <p className="text-muted mb-0">
+                <div className="empty-state">
+                  <div className="empty-state-icon">
+                    <i className="bi bi-check-circle"></i>
+                  </div>
+                  <h5>All Clear!</h5>
+                  <p>
               No unverified tutors found. All tutor applications have been processed.
             </p>
-          </div>
         </div>
       ) : (
-        /* Iteration 2 - Enhanced table with Bootstrap styling */
-        <div className="card shadow-sm">
-          <div className="card-header bg-dark text-white">
-            <h5 className="mb-0 fw-semibold">Pending Tutor Applications</h5>
-          </div>
-          <div className="card-body p-0">
             <div className="table-responsive">
               <table className="table table-hover mb-0">
                 <thead>
@@ -143,7 +297,6 @@ function AdminDashboard() {
                     <th>Email</th>
                     <th>Modules</th>
                     <th>Hourly Rate</th>
-                    {/* Iteration 2 - Added Bio column */}
                     <th>Bio</th>
                     <th>Proof Document</th>
                     <th className="text-center">Actions</th>
@@ -155,27 +308,22 @@ function AdminDashboard() {
                       <td className="align-middle">
                         <strong>{tutor.first_name} {tutor.last_name}</strong>
                       </td>
-                      {/* Iteration 2 - Make email clickable */}
                       <td className="align-middle">
                         <a href={`mailto:${tutor.college_email}`} className="text-decoration-none">
                           {tutor.college_email}
                         </a>
                       </td>
-                      {/* Iteration 2 - Modules as badge */}
                       <td className="align-middle">
                         <span className="badge bg-info text-dark">{tutor.modules}</span>
                       </td>
-                      {/* Iteration 2 - Hourly rate styling */}
                       <td className="align-middle">
                         <span className="fw-bold text-success">€{tutor.hourly_rate}</span>
                       </td>
-                      {/* Iteration 2 - Bio column */}
                       <td className="align-middle">
                         <small className="text-muted" style={{ maxWidth: "200px", display: "block" }}>
                           {tutor.bio || <em>No bio provided</em>}
                         </small>
                       </td>
-                      {/* Story 15 - Proof document with modal view */}
                       <td className="align-middle">
                         {tutor.proof_doc ? (
                           <button
@@ -183,14 +331,13 @@ function AdminDashboard() {
                             className="btn btn-sm btn-outline-primary"
                             title="View proof document"
                           >
-                            📄 View Document
+                                View Document
                           </button>
                         ) : (
                           <span className="badge bg-secondary">No document</span>
                         )}
                       </td>
                       <td className="text-center align-middle">
-                        {/* Iteration 2 - Enhanced button styling */}
                         <button
                           className="btn btn-success btn-sm me-2"
                           onClick={() => handleApprove(tutor.tutor_id)}
@@ -210,43 +357,265 @@ function AdminDashboard() {
                   ))}
                 </tbody>
               </table>
+                </div>
+              )}
             </div>
+          </div>
+        )}
+
+        {/* All Bookings Section */}
+        {activeSection === 'all-bookings' && (
+          <div className="card">
+            <div className="card-body">
+              <div className="page-header mb-4">
+                <h3 className="mb-0">
+                  <i className="bi bi-calendar-check me-2"></i>
+                  All Bookings
+                </h3>
+              </div>
+              <AdminAllBookings />
           </div>
         </div>
       )}
 
-
-
-      {/* Story 9 - Admin view all bookings section (lines 224-235) */}
-      {/* file reference: https://getbootstrap.com/docs/5.3/ (lines 224-235) */}
-      <div className="mt-5">
-        <div className="d-flex justify-content-between align-items-center mb-3">
-          <div>
-            <h2 className="mb-2 fw-bold" style={{ fontSize: "1.75rem" }}>
-              All Bookings
-            </h2>
-            <p className="text-muted mb-0">Monitor all tutoring sessions across the platform</p>
+        {/* All Reviews Section */}
+        {activeSection === 'all-reviews' && (
+          <div className="card">
+            <div className="card-body">
+              <div className="page-header mb-4">
+                <h3 className="mb-0">
+                  <i className="bi bi-star me-2"></i>
+                  All Reviews
+                </h3>
+              </div>
+              <AdminAllReviews />
+            </div>
           </div>
+        )}
+
+        {/* User Management Section */}
+        {activeSection === 'user-management' && (
+          <div className="card">
+            <div className="card-body">
+              <div className="page-header mb-4">
+                <h3 className="mb-0">
+                  <i className="bi bi-people me-2"></i>
+                  User Management
+                </h3>
+              </div>
+              
+              {loadingUsers && (
+                <div className="alert alert-info d-flex align-items-center">
+                  <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  Loading users...
+                </div>
+              )}
+              
+              {usersError && (
+                <div className="alert alert-danger">{usersError}</div>
+              )}
+
+              {!loadingUsers && !usersError && users.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-state-icon">
+                    <i className="bi bi-people"></i>
+                  </div>
+                  <h5>No Users Found</h5>
+                  <p>No users registered in the system.</p>
+                </div>
+              ) : (
+                <div className="table-responsive">
+                    <table className="table table-hover mb-0">
+                      <thead>
+                        <tr>
+                          <th>Email</th>
+                          <th>Role</th>
+                          <th>Linked Profile</th>
+                          <th>Status</th>
+                          <th>Created</th>
+                          <th className="text-center">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {users.map((user) => (
+                          <tr key={user.user_id}>
+                            <td className="align-middle">
+                              <strong>{user.email}</strong>
+                            </td>
+                            <td className="align-middle">
+                              <span className={`badge ${
+                                user.role === 'admin' ? 'bg-danger' :
+                                user.role === 'tutor' ? 'bg-primary' :
+                                'bg-info'
+                              }`}>
+                                {user.role}
+                              </span>
+                            </td>
+                            <td className="align-middle">
+                              {user.role === 'learner' && user.student_name && (
+                                <span className="text-muted small">{user.student_name}</span>
+                              )}
+                              {user.role === 'tutor' && user.tutor_name && (
+          <div>
+                                  <span className="text-muted small">{user.tutor_name}</span>
+                                  {user.tutor_verified === 1 && (
+                                    <span className="badge bg-success ms-2" style={{ fontSize: "0.7rem" }}>Verified</span>
+                                  )}
+                                </div>
+                              )}
+                              {(!user.student_name && !user.tutor_name) && (
+                                <span className="text-muted small">Not linked</span>
+                              )}
+                            </td>
+                            <td className="align-middle">
+                              <span className={`badge ${
+                                user.is_active === 1 ? 'bg-success' : 'bg-danger'
+                              }`}>
+                                {user.is_active === 1 ? 'Active' : 'Deactivated'}
+                              </span>
+                            </td>
+                            <td className="align-middle">
+                              <small className="text-muted">
+                                {user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}
+                              </small>
+                            </td>
+                            <td className="text-center align-middle">
+                              {user.role !== 'admin' && (
+                                <div className="d-flex gap-2 justify-content-center">
+                                  {user.is_active === 1 ? (
+                                    <button
+                                      className="btn btn-danger btn-sm"
+                                      onClick={() => {
+                                        if (window.confirm(`Are you sure you want to deactivate ${user.email}?`)) {
+                                          updateUserStatus(user.user_id, false);
+                                        }
+                                      }}
+                                      title="Deactivate account"
+                                    >
+                                      Deactivate
+                                    </button>
+                                  ) : (
+                                    <button
+                                      className="btn btn-success btn-sm"
+                                      onClick={() => {
+                                        if (window.confirm(`Are you sure you want to activate ${user.email}?`)) {
+                                          updateUserStatus(user.user_id, true);
+                                        }
+                                      }}
+                                      title="Activate account"
+                                    >
+                                      Activate
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                              {user.role === 'admin' && (
+                                <span className="text-muted small">Protected</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Platform Report Section */}
+        {activeSection === 'platform-report' && (
+          <div className="card">
+            <div className="card-body">
+              <div className="page-header mb-4">
+                <div className="d-flex justify-content-between align-items-start">
+                  <div>
+                    <h3 className="mb-0">
+                      <i className="bi bi-graph-up me-2"></i>
+                      Platform Report
+                    </h3>
+                    <p className="text-muted mb-0 mt-2">Overview of platform statistics and metrics</p>
+                  </div>
+                  <button 
+                    className="btn btn-outline-secondary btn-sm" 
+                    onClick={exportReport}
+                    disabled={!report}
+                    title="Export Report"
+                  >
+                    <i className="bi bi-download me-2"></i>
+                    Export
+                  </button>
         </div>
-        <AdminAllBookings />
       </div>
 
-      {/* Story 9 - Admin view all reviews section (lines 237-248) */}
-      {/* file reference: https://getbootstrap.com/docs/5.3/ (lines 237-248) */}
-      <div className="mt-5">
-        <div className="d-flex justify-content-between align-items-center mb-3">
-          <div>
-            <h2 className="mb-2 fw-bold" style={{ fontSize: "1.75rem" }}>
-              All Reviews
-            </h2>
-            <p className="text-muted mb-0">View all ratings and feedback from learners</p>
+              {loadingReport ? (
+                <div className="text-center py-5">
+                  <div className="spinner-border text-primary" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                  </div>
+                  <p className="text-muted mt-3 mb-0">Generating platform report...</p>
+                </div>
+              ) : report ? (
+                <>
+                  {/* Professional Stats Grid */}
+                  <div className="row g-4 mb-4">
+                    <div className="col-md-3">
+                      <div className="stats-card bg-primary text-white">
+                        <div className="value">{report.summary?.total_users || 0}</div>
+                        <div className="label">Total Users</div>
+                      </div>
+                    </div>
+                    <div className="col-md-3">
+                      <div className="stats-card bg-success text-white">
+                        <div className="value">{report.summary?.total_bookings || 0}</div>
+                        <div className="label">Total Bookings</div>
+                      </div>
+                    </div>
+                    <div className="col-md-3">
+                      <div className="stats-card bg-info text-white">
+                        <div className="value">{report.summary?.total_verified_tutors || 0}</div>
+                        <div className="label">Verified Tutors</div>
+                      </div>
+                    </div>
+                    <div className="col-md-3">
+                      <div className="stats-card bg-warning text-dark">
+                        <div className="value">{report.summary?.average_tutor_rating || 0}/5</div>
+                        <div className="label">Avg Rating</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="alert alert-info">
+                    <i className="bi bi-info-circle me-2"></i>
+                    <strong>Note:</strong> Click "Refresh Report" in the header to update the statistics.
+                  </div>
+                </>
+              ) : (
+                <div className="empty-state">
+                  <div className="empty-state-icon">
+                    <i className="bi bi-graph-up"></i>
+                  </div>
+                  <h5>No Report Generated</h5>
+                  <p className="mb-4">Click "Refresh Report" in the header to generate a platform report.</p>
+                  <button 
+                    className="btn btn-primary"
+                    onClick={generateReport}
+                    disabled={loadingReport}
+                  >
+                    {loadingReport ? (
+                      <span className="spinner-border spinner-border-sm me-2"></span>
+                    ) : (
+                      <i className="bi bi-arrow-clockwise me-2"></i>
+                    )}
+                    Generate Report
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-        <AdminAllReviews />
+        )}
       </div>
 
       {/* Story 15 - Modal for viewing proof documents */}
-      {/* file reference: https://getbootstrap.com/docs/5.3/components/modal/ (lines 247-294) */}
       {viewingDocument && (
         <div 
           className="modal fade show" 
@@ -282,7 +651,7 @@ function AdminDashboard() {
                   download
                   className="btn btn-primary me-2"
                 >
-                  📥 Download
+                  Download
                 </a>
                 <button
                   type="button"
@@ -342,8 +711,7 @@ const AdminAllBookings = () => {
   };
 
   return (
-    <div className="card shadow-sm">
-      <div className="card-body">
+    <div className="p-3">
         {loading && (
           <div className="alert alert-info d-flex align-items-center">
             <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
@@ -402,7 +770,7 @@ const AdminAllBookings = () => {
                       <strong>{booking.tutor_name}</strong>
                     </td>
                     <td className="align-middle">
-                      <span className="badge bg-info text-dark">{booking.tutor_modules}</span>
+                      <span className="badge bg-info text-dark">{booking.module || 'N/A'}</span>
                     </td>
                     <td className="align-middle">
                       <span className={`badge ${
@@ -451,7 +819,6 @@ const AdminAllBookings = () => {
             </table>
           </div>
         )}
-      </div>
     </div>
   );
 };
@@ -498,8 +865,7 @@ const AdminAllReviews = () => {
   };
 
   return (
-    <div className="card shadow-sm">
-      <div className="card-body">
+    <div className="p-3">
         {loading && (
           <div className="alert alert-info d-flex align-items-center">
             <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
@@ -571,7 +937,6 @@ const AdminAllReviews = () => {
             </table>
           </div>
         )}
-      </div>
     </div>
   );
 };

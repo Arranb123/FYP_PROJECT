@@ -1,36 +1,40 @@
-# Python cache files
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
+.Python
+env/
+venv/
+ENV/
+.venv
 
+# Database
+*.db
+*.sqlite
+*.sqlite3
 
-
-
-
-# Environment variables
+# API Keys and Credentials
+credentials.json
+token.json
+config_local.py
+config.py
 .env
-.env.local
-.env.*.local
+*.key
 
-
-
-# IDE files
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
 
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads
+uploads/*
+!uploads/.gitkeep
 
 # Logs
 *.log
-
-# Distribution / packaging
-dist/
-build/
-*.egg-info/
-
-# Story 15 - Uploaded proof documents (user-uploaded files)
-uploads/
-

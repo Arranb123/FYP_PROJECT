@@ -68,6 +68,9 @@ const Register = ({ onRegisterSuccess }) => {
       // Show success message (will be overridden if tutor)
       if (formData.role !== 'tutor') {
         setMessage({ type: "success", text: "Registration successful! You can now log in." });
+        if (window.showToast) {
+          window.showToast("Registration successful! You can now log in.", "success", 3000);
+        }
       }
       
       // Clear form after successful registration

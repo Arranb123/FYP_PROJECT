@@ -53,10 +53,7 @@ def get_db_connection():
 # Iteration 2 - Database corruption recovery function - https://chatgpt.com/share/691cdc1c-f098-8008-a3a9-72ed9ea757bb
 # I used chatgpt to help me understand how to backup the database and how to handle errors
 def backup_corrupt_database():
-    """
-    This function backs up a corrupted database file before recreating it.
-    It renames the corrupted file with a timestamp so I don't lose it completely.
-    """
+    # Backs up corrupted database before recreating it
     # Check if the database file actually exists
     if not DB_PATH.exists():
         # If it doesn't exist, there's nothing to backup, so return None
@@ -96,12 +93,8 @@ def backup_corrupt_database():
 # from line 34 to 250~
 
 def init_database(retry_on_corruption=True):
-    """
-    This function sets up the database by creating all the tables needed.
-    It's called when the server starts to make sure the database structure exists.
-    
-    retry_on_corruption: If True and the database is corrupted, try to fix it automatically
-    """
+    # Sets up database tables on server start
+    # retry_on_corruption: if True, tries to fix corrupted database automatically
     # Start with no connection (conn = None)
     conn = None
     try:
@@ -165,6 +158,15 @@ def init_database(retry_on_corruption=True):
         );
         """)
         
+        # Iteration 4 - Add module column to bookings table if it doesn't exist
+        # added this so each booking can have a specific module instead of all tutor modules
+        # ref: SQLite ALTER TABLE - https://www.sqlite.org/lang_altertable.html
+        try:
+            cursor.execute("ALTER TABLE bookings ADD COLUMN module TEXT")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        
         # Try to add created_at column to tutors table if it doesn't exist
         try:
             cursor.execute("ALTER TABLE tutors ADD COLUMN created_at TIMESTAMP")
@@ -224,10 +226,59 @@ def init_database(retry_on_corruption=True):
             role TEXT NOT NULL DEFAULT 'learner',       -- User role: 'learner', 'tutor', or 'admin'
             student_id INTEGER,                          -- Links to students table if role is learner
             tutor_id INTEGER,                           -- Links to tutors table if role is tutor
+            is_active INTEGER DEFAULT 1,                 -- Iteration 4 - Account status: 1=active, 0=deactivated
+            -- ref: SQLite user management - https://www.sqlitetutorial.net/sqlite-alter-table/
             created_at TIMESTAMP,                        -- When this user account was created
             updated_at TIMESTAMP,                        -- When this user account was last updated
             FOREIGN KEY (student_id) REFERENCES students(id),  -- Links to students table
             FOREIGN KEY (tutor_id) REFERENCES tutors(tutor_id)  -- Links to tutors table
+        );
+        """)
+        
+        # Iteration 4 - Add is_active column to users table if it doesn't exist
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1")
+            # Update all existing users to be active by default
+            cursor.execute("UPDATE users SET is_active = 1 WHERE is_active IS NULL")
+            conn.commit()
+            print("[INFO] Added 'is_active' column to users table.")
+        except sqlite3.OperationalError as e:
+            if "duplicate column name: is_active" in str(e):
+                print("[INFO] 'is_active' column already exists in users table.")
+            else:
+                print(f"[ERROR] Failed to add 'is_active' column to users table: {e}")
+        
+        # Iteration 4 - Create tutor availability table
+        # This table stores when tutors are available for sessions
+        # ref: https://www.w3schools.com/sql/sql_create_table.asp
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS tutor_availability (
+            availability_id INTEGER PRIMARY KEY AUTOINCREMENT,  -- Autoincrementing unique ID
+            tutor_id INTEGER NOT NULL,                          -- ID of the tutor
+            day_of_week INTEGER NOT NULL CHECK (day_of_week >= 0 AND day_of_week <= 6),  -- 0=Monday, 6=Sunday
+            start_time TIME NOT NULL,                           -- Start time (e.g., '09:00:00')
+            end_time TIME NOT NULL,                             -- End time (e.g., '17:00:00')
+            is_available INTEGER DEFAULT 1,                     -- 1=available, 0=unavailable
+            created_at TIMESTAMP,                               -- When this availability was created
+            updated_at TIMESTAMP,                                -- When this availability was last updated
+            FOREIGN KEY (tutor_id) REFERENCES tutors(tutor_id)    -- Links to tutors table
+        );
+        """)
+        
+        # Iteration 4 - Create messages table for booking communication
+        # This table stores messages between learners and tutors for accepted bookings
+        # ChatGPT conversation reference for messaging feature implementation:
+        # https://chatgpt.com/share/6984af21-d9ac-8008-a016-f00a20286dd1
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS messages (
+            message_id INTEGER PRIMARY KEY AUTOINCREMENT,  -- Autoincrementing unique ID for each message
+            booking_id INTEGER NOT NULL,                   -- ID of the booking this message belongs to
+            sender_id INTEGER NOT NULL,                     -- ID of the sender (learner_id or tutor_id)
+            sender_role TEXT NOT NULL,                      -- Role of sender: 'learner' or 'tutor'
+            message_text TEXT NOT NULL,                     -- The actual message content
+            read_at TIMESTAMP,                              -- When the message was read (NULL if unread)
+            created_at TIMESTAMP,                           -- When this message was created
+            FOREIGN KEY (booking_id) REFERENCES bookings(booking_id)  -- Links to bookings table
         );
         """)
         # End Iteration 3 - Database tables created
@@ -516,21 +567,61 @@ def add_tutor():
             conn.close()
 # End Story 15 - Tutor creation with file upload
 
-# GET VERIFIED TUTORS (for learners serch)
+# GET VERIFIED TUTORS (for learners search)
 ###https://www.youtube.com/watch?v=KO0FufpqC7c#### - Video used to help create route
+# Iteration 4 - Added search filters (price range, rating, sorting)
+# ref: SQL WHERE clause - https://www.w3schools.com/sql/sql_where.asp
 @app.route('/api/tutors', methods=['GET'])
 def get_tutor_list():
-    #returns verifed tutors when searched for module
+    #returns verified tutors when searched for module
     module_query = request.args.get("module", "").strip() ##looks for query eg if frontend sends is3319 , this will store that
+    
+    # Iteration 4 - Get filter parameters
+    min_price = request.args.get("min_price", type=float)
+    max_price = request.args.get("max_price", type=float)
+    min_rating = request.args.get("min_rating", type=float)
+    sort_by = request.args.get("sort_by", "default")  # default, price_low, price_high, rating_high, rating_low
+    
     conn = get_db_connection()#db conn
     cursor = conn.cursor()
 
-    #if module is specified , filter by module name
+    # Iteration 4 - Build query with filters
+    query = "SELECT * FROM tutors WHERE verified = 1"
+    params = []
+    
+    # Module filter
     if module_query:
-        cursor.execute("SELECT * FROM tutors WHERE verified = 1 AND modules LIKE ?", ('%' + module_query + '%',))  #query logic 
+        query += " AND modules LIKE ?"
+        params.append('%' + module_query + '%')
+    
+    # Price range filters
+    if min_price is not None:
+        query += " AND hourly_rate >= ?"
+        params.append(min_price)
+    
+    if max_price is not None:
+        query += " AND hourly_rate <= ?"
+        params.append(max_price)
+    
+    # Rating filter
+    if min_rating is not None:
+        query += " AND rating >= ?"
+        params.append(min_rating)
+    
+    # Sorting
+    if sort_by == "price_low":
+        query += " ORDER BY hourly_rate ASC"
+    elif sort_by == "price_high":
+        query += " ORDER BY hourly_rate DESC"
+    elif sort_by == "rating_high":
+        query += " ORDER BY rating DESC, hourly_rate ASC"
+    elif sort_by == "rating_low":
+        query += " ORDER BY rating ASC, hourly_rate ASC"
     else:
-        cursor.execute("SELECT * FROM tutors WHERE verified = 1")
+        # Default: sort by rating (high to low), then by price (low to high)
+        query += " ORDER BY rating DESC, hourly_rate ASC"
 
+    cursor.execute(query, tuple(params) if params else None)
     tutors = cursor.fetchall()  #fetches 
     conn.close()  #closes connection
 
@@ -630,11 +721,15 @@ def reject_tutor(tutor_id):
 
 # create booking endpoint
 # Creates a new booking when learner books a session
+# Iteration 4 - Added API integrations (Google Calendar, Email, Timezone)
+# ChatGPT conversation reference for API integration guidance:
+# https://chatgpt.com/share/6984a96d-f0cc-8008-abdc-dc3fe4261951
 @app.route('/api/bookings', methods=['POST'])
 def create_booking():
     """
     Creates a new booking in the database.
     Links a learner with a tutor for a specific date and time.
+    Integrates with Google Calendar API, Email API, and Timezone API.
     """
     # Get booking data from request
     data = request.get_json()
@@ -643,29 +738,191 @@ def create_booking():
     session_date = data.get('session_date')
     session_time = data.get('session_time')
     duration = data.get('duration', 60)
+    module = data.get('module')  # Iteration 4 - Module for this specific booking
 
     # Check all required fields are provided
-    if not all([learner_id, tutor_id, session_date, session_time]):
-        return jsonify({"error": "Missing required fields"}), 400
+    if not all([learner_id, tutor_id, session_date, session_time, module]):
+        return jsonify({"error": "Missing required fields. Please select a module."}), 400
 
+    conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        
+        # Get learner and tutor information for API integrations
+        cursor.execute("SELECT first_name, last_name, college_email FROM students WHERE id = ?", (learner_id,))
+        learner = cursor.fetchone()
+        cursor.execute("SELECT first_name, last_name, college_email FROM tutors WHERE tutor_id = ?", (tutor_id,))
+        tutor = cursor.fetchone()
+        
+        if not learner or not tutor:
+            return jsonify({"error": "Learner or tutor not found"}), 404
+        
+        learner_name = f"{learner['first_name']} {learner['last_name']}".strip()
+        tutor_name = f"{tutor['first_name']} {tutor['last_name']}".strip()
+        learner_email = learner['college_email']
+        tutor_email = tutor['college_email']
+        
+        # Iteration 4 - Check tutor availability for the requested time
+        # ref: SQL date time validation - https://www.sqlitetutorial.net/sqlite-date/
+        # ref: Python datetime - https://docs.python.org/3/library/datetime.html
+        try:
+            booking_date = datetime.strptime(session_date, "%Y-%m-%d")
+            day_of_week = booking_date.weekday()  # 0=Monday, 6=Sunday
+            
+            # Check if tutor has availability set for this day
+            cursor.execute("""
+                SELECT start_time, end_time FROM tutor_availability 
+                WHERE tutor_id = ? AND day_of_week = ? AND is_available = 1
+            """, (tutor_id, day_of_week))
+            availability = cursor.fetchone()
+            
+            if availability:
+                # Check if requested time is within available hours
+                start_time = availability["start_time"]
+                end_time = availability["end_time"]
+                session_time_obj = datetime.strptime(session_time, "%H:%M").time()
+                start_time_obj = datetime.strptime(start_time, "%H:%M:%S").time()
+                end_time_obj = datetime.strptime(end_time, "%H:%M:%S").time()
+                
+                # Check if session time is within available window
+                if session_time_obj < start_time_obj or session_time_obj >= end_time_obj:
+                    return jsonify({
+                        "error": f"Tutor is only available between {start_time[:5]} and {end_time[:5]} on this day"
+                    }), 400
+                
+                # Check if session end time exceeds available window
+                session_end_time = (datetime.combine(booking_date.date(), session_time_obj) + timedelta(minutes=duration)).time()
+                if session_end_time > end_time_obj:
+                    return jsonify({
+                        "error": f"Session duration would exceed tutor's available time. Tutor available until {end_time[:5]}"
+                    }), 400
+                
+                # Check for conflicts with existing bookings
+                cursor.execute("""
+                    SELECT session_time, duration FROM bookings 
+                    WHERE tutor_id = ? AND session_date = ? 
+                    AND status IN ('pending', 'confirmed')
+                """, (tutor_id, session_date))
+                existing_bookings = cursor.fetchall()
+                
+                for booking in existing_bookings:
+                    existing_time_str = booking["session_time"]
+                    if isinstance(existing_time_str, str):
+                        existing_hour, existing_min = map(int, existing_time_str.split(':')[:2])
+                        existing_datetime = datetime.combine(booking_date.date(), datetime.strptime(f"{existing_hour:02d}:{existing_min:02d}", "%H:%M").time())
+                        existing_duration = booking["duration"] or 60
+                        existing_end = existing_datetime + timedelta(minutes=existing_duration)
+                        
+                        requested_datetime = datetime.combine(booking_date.date(), session_time_obj)
+                        requested_end = requested_datetime + timedelta(minutes=duration)
+                        
+                        # Check for overlap
+                        if not (requested_end <= existing_datetime or requested_datetime >= existing_end):
+                            return jsonify({
+                                "error": "This time slot is already booked. Please select another time."
+                            }), 400
+            else:
+                # Tutor hasn't set availability for this day - allow booking but warn
+                print(f"[WARNING] Tutor {tutor_id} has no availability set for {day_of_week}, allowing booking anyway")
+        except ValueError as e:
+            return jsonify({"error": f"Invalid date or time format: {str(e)}"}), 400
+        except Exception as e:
+            print(f"[WARNING] Error checking availability: {e}")
+            # Continue with booking if availability check fails (backward compatibility)
+        
         # Get current timestamp - used to track when booking was created and last updated
         now = datetime.now()
         # Insert booking into database with status 'pending'
         # Timestamps: created_at and updated_at both set to now when booking is first created
         # This lets me track when bookings were made and when they were last changed
+        # Iteration 4 - Insert booking with module
         cursor.execute("""
-            INSERT INTO bookings (learner_id, tutor_id, session_date, session_time, duration, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)
-        """, (learner_id, tutor_id, session_date, session_time, duration, now, now))
+            INSERT INTO bookings (learner_id, tutor_id, session_date, session_time, duration, status, module, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+        """, (learner_id, tutor_id, session_date, session_time, duration, module, now, now))
         conn.commit()
         new_id = cursor.lastrowid
+        
+        # Prepare booking data for API calls
+        booking_data = {
+            'session_date': session_date,
+            'session_time': session_time,
+            'duration': duration
+        }
+        
+        # Iteration 4 - API Integrations
+        api_results = {}
+        
+        # 1. Google Calendar API - Create calendar event
+        # Reference: https://chatgpt.com/share/6984a96d-f0cc-8008-abdc-dc3fe4261951
+        try:
+            from api_integrations import create_google_calendar_event
+            print(f"[INFO] Attempting to create Google Calendar event for booking {new_id}")
+            calendar_result = create_google_calendar_event(
+                booking_data, learner_email, tutor_email, learner_name, tutor_name
+            )
+            api_results['google_calendar'] = calendar_result
+            if calendar_result.get('success'):
+                print(f"[SUCCESS] Google Calendar event created: {calendar_result.get('event_id')}")
+            else:
+                print(f"[INFO] Google Calendar: {calendar_result.get('message')}")
+        except ImportError as e:
+            print(f"[WARNING] Google Calendar API dependencies not installed: {e}")
+            print(f"[INFO] Install with: pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib")
+            api_results['google_calendar'] = {"success": False, "message": f"Dependencies not installed: {str(e)}"}
+        except Exception as e:
+            print(f"[WARNING] Google Calendar integration failed: {e}")
+            import traceback
+            traceback.print_exc()
+            api_results['google_calendar'] = {"success": False, "message": str(e)}
+        
+        # 2. Email API - Send confirmation emails
+        # Reference: https://chatgpt.com/share/6984a96d-f0cc-8008-abdc-dc3fe4261951
+        try:
+            from api_integrations import send_booking_confirmation_email
+            print(f"[INFO] Attempting to send booking confirmation emails")
+            email_result = send_booking_confirmation_email(
+                learner_email, tutor_email, learner_name, tutor_name, booking_data
+            )
+            api_results['email'] = email_result
+            if email_result.get('success'):
+                print(f"[SUCCESS] Email API: {email_result.get('message')}")
+            else:
+                print(f"[WARNING] Email API failed: {email_result.get('message')}")
+        except Exception as e:
+            print(f"[ERROR] Email integration failed: {e}")
+            traceback.print_exc()
+            api_results['email'] = {"success": False, "message": str(e)}
+        
+        # 3. Timezone API - Get timezone information (optional)
+        # Reference: https://chatgpt.com/share/6984a96d-f0cc-8008-abdc-dc3fe4261951
+        try:
+            from api_integrations import get_timezone_info
+            timezone_result = get_timezone_info()
+            api_results['timezone'] = timezone_result
+        except Exception as e:
+            print(f"[WARNING] Timezone API integration failed: {e}")
+            api_results['timezone'] = {"success": False, "message": str(e)}
+        
         conn.close()
-        return jsonify({"message": "Booking created successfully!", "booking_id": new_id}), 201
+        
+        return jsonify({
+            "message": "Booking created successfully!",
+            "booking_id": new_id,
+            "api_integrations": api_results
+        }), 201
     except sqlite3.Error as e:
+        if conn:
+            conn.close()
         return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        if conn:
+            conn.close()
+        print(f"[ERROR] Unexpected error in create_booking: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
 
 
 # Gets all bookings for a specific tutor
@@ -745,17 +1002,28 @@ def get_tutor_bookings(tutor_id):
                     traceback.print_exc()
     
     # Re-fetch bookings to get updated statuses
+    # Iteration 5 - Filter out cancelled bookings older than 24 hours
+    twenty_four_hours_ago = now - timedelta(hours=24)
+    twenty_four_hours_ago_str = twenty_four_hours_ago.strftime("%Y-%m-%d %H:%M:%S")
     cursor.execute("""
         SELECT b.*, s.first_name as learner_first_name, s.last_name as learner_last_name, s.college_email as learner_email
         FROM bookings b
         JOIN students s ON b.learner_id = s.id
         WHERE b.tutor_id = ?
+          AND NOT (b.status = 'cancelled' AND b.updated_at < ?)
         ORDER BY b.session_date DESC, b.session_time DESC
-    """, (tutor_id,))
+    """, (tutor_id, twenty_four_hours_ago_str))
     bookings = cursor.fetchall()
     conn.close()
 
     # Convert to list of dictionaries
+    # Iteration 4 - Helper function to safely get module from sqlite3.Row
+    def get_module_safe(booking_row):
+        try:
+            return booking_row["module"]
+        except (KeyError, IndexError):
+            return ""
+    
     booking_list = [
         {
             "booking_id": b["booking_id"],
@@ -763,6 +1031,7 @@ def get_tutor_bookings(tutor_id):
             "learner_name": f"{b['learner_first_name']} {b['learner_last_name']}",
             "learner_email": b["learner_email"],
             "tutor_id": b["tutor_id"],
+            "module": get_module_safe(b),  # Iteration 4 - Specific module for this booking
             "session_date": b["session_date"],
             "session_time": b["session_time"],
             "duration": b["duration"],
@@ -852,24 +1121,36 @@ def get_learner_bookings(learner_id):
                     traceback.print_exc()
     
     # Re-fetch bookings to get updated statuses
+    # Iteration 5 - Filter out cancelled bookings older than 24 hours
+    twenty_four_hours_ago = now - timedelta(hours=24)
+    twenty_four_hours_ago_str = twenty_four_hours_ago.strftime("%Y-%m-%d %H:%M:%S")
     cursor.execute("""
         SELECT b.*, t.first_name as tutor_first_name, t.last_name as tutor_last_name, t.modules, t.hourly_rate
         FROM bookings b
         JOIN tutors t ON b.tutor_id = t.tutor_id
         WHERE b.learner_id = ?
+          AND NOT (b.status = 'cancelled' AND b.updated_at < ?)
         ORDER BY b.session_date DESC, b.session_time DESC
-    """, (learner_id,))
+    """, (learner_id, twenty_four_hours_ago_str))
     bookings = cursor.fetchall()
     conn.close()
 
     # Convert to list of dictionaries
+    # Iteration 4 - Helper function to safely get module from sqlite3.Row
+    def get_module_safe(booking_row):
+        try:
+            return booking_row["module"]
+        except (KeyError, IndexError):
+            return ""
+    
     booking_list = [
         {
             "booking_id": b["booking_id"],
             "learner_id": b["learner_id"],
             "tutor_id": b["tutor_id"],
             "tutor_name": f"{b['tutor_first_name']} {b['tutor_last_name']}",
-            "tutor_modules": b["modules"],
+            "tutor_modules": b["modules"],  # All modules tutor teaches
+            "module": get_module_safe(b),  # Iteration 4 - Specific module for this booking
             "tutor_hourly_rate": b["hourly_rate"],
             "session_date": b["session_date"],
             "session_time": b["session_time"],
@@ -1114,6 +1395,9 @@ def get_all_bookings():
         if completed_count > 0:
             print(f"[INFO] Admin bookings: Auto-completed {completed_count} booking(s)")
         # Re-fetch bookings to get updated statuses
+        # Iteration 5 - Filter out cancelled bookings older than 24 hours
+        twenty_four_hours_ago = now - timedelta(hours=24)
+        twenty_four_hours_ago_str = twenty_four_hours_ago.strftime("%Y-%m-%d %H:%M:%S")
         cursor.execute("""
             SELECT b.*, 
                    s.first_name as learner_first_name, s.last_name as learner_last_name, s.college_email as learner_email,
@@ -1121,12 +1405,20 @@ def get_all_bookings():
             FROM bookings b
             JOIN students s ON b.learner_id = s.id
             JOIN tutors t ON b.tutor_id = t.tutor_id
+            WHERE NOT (b.status = 'cancelled' AND b.updated_at < ?)
             ORDER BY b.created_at DESC
-        """)
+        """, (twenty_four_hours_ago_str,))
         bookings = cursor.fetchall()
         conn.close()
 
         # Convert to list of dictionaries
+        # Iteration 4 - Helper function to safely get module from sqlite3.Row
+        def get_module_safe(booking_row):
+            try:
+                return booking_row["module"]
+            except (KeyError, IndexError):
+                return ""
+        
         booking_list = [
             {
                 "booking_id": b["booking_id"],
@@ -1135,7 +1427,8 @@ def get_all_bookings():
                 "learner_email": b["learner_email"],
                 "tutor_id": b["tutor_id"],
                 "tutor_name": f"{b['tutor_first_name']} {b['tutor_last_name']}",
-                "tutor_modules": b["modules"],
+                "tutor_modules": b["modules"],  # All modules tutor teaches
+                "module": get_module_safe(b),  # Iteration 4 - Specific module for this booking
                 "tutor_hourly_rate": b["hourly_rate"],
                 "session_date": b["session_date"],
                 "session_time": b["session_time"],
@@ -1150,6 +1443,269 @@ def get_all_bookings():
     except sqlite3.Error as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
 # End Story 9 - Admin view all bookings
+
+# Iteration 4 - Admin platform report endpoint
+# ref: SQL aggregation functions - https://www.w3schools.com/sql/sql_count_avg_sum.asp
+@app.route('/api/admin/report', methods=['GET'])
+def generate_platform_report():
+    """
+    Generates a comprehensive platform report with statistics.
+    Includes user counts, booking statistics, tutor metrics, and more.
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        report = {
+            "generated_at": datetime.now().isoformat(),
+            "summary": {},
+            "users": {},
+            "bookings": {},
+            "tutors": {},
+            "modules": {},
+            "reviews": {},
+            "recent_activity": {}
+        }
+        
+        # User Statistics
+        cursor.execute("SELECT COUNT(*) as count FROM users WHERE role = 'learner'")
+        learner_count = cursor.fetchone()["count"]
+        
+        cursor.execute("SELECT COUNT(*) as count FROM users WHERE role = 'tutor'")
+        tutor_user_count = cursor.fetchone()["count"]
+        
+        cursor.execute("SELECT COUNT(*) as count FROM users WHERE role = 'admin'")
+        admin_count = cursor.fetchone()["count"]
+        
+        cursor.execute("SELECT COUNT(*) as count FROM students")
+        student_count = cursor.fetchone()["count"]
+        
+        cursor.execute("SELECT COUNT(*) as count FROM tutors")
+        tutor_record_count = cursor.fetchone()["count"]
+        
+        cursor.execute("SELECT COUNT(*) as count FROM tutors WHERE verified = 1")
+        verified_tutor_count = cursor.fetchone()["count"]
+        
+        cursor.execute("SELECT COUNT(*) as count FROM tutors WHERE verified = 0")
+        unverified_tutor_count = cursor.fetchone()["count"]
+        
+        report["users"] = {
+            "total_learners": learner_count,
+            "total_students": student_count,
+            "total_tutor_users": tutor_user_count,
+            "total_tutor_records": tutor_record_count,
+            "verified_tutors": verified_tutor_count,
+            "unverified_tutors": unverified_tutor_count,
+            "total_admins": admin_count,
+            "total_users": learner_count + tutor_user_count + admin_count
+        }
+        
+        # Booking Statistics
+        cursor.execute("SELECT COUNT(*) as count FROM bookings")
+        total_bookings = cursor.fetchone()["count"]
+        
+        cursor.execute("SELECT COUNT(*) as count FROM bookings WHERE status = 'pending'")
+        pending_bookings = cursor.fetchone()["count"]
+        
+        cursor.execute("SELECT COUNT(*) as count FROM bookings WHERE status = 'confirmed'")
+        confirmed_bookings = cursor.fetchone()["count"]
+        
+        cursor.execute("SELECT COUNT(*) as count FROM bookings WHERE status = 'accepted'")
+        accepted_bookings = cursor.fetchone()["count"]
+        
+        cursor.execute("SELECT COUNT(*) as count FROM bookings WHERE status = 'completed'")
+        completed_bookings = cursor.fetchone()["count"]
+        
+        cursor.execute("SELECT COUNT(*) as count FROM bookings WHERE status = 'cancelled'")
+        cancelled_bookings = cursor.fetchone()["count"]
+        
+        cursor.execute("SELECT COUNT(*) as count FROM bookings WHERE status = 'denied'")
+        denied_bookings = cursor.fetchone()["count"]
+        
+        cursor.execute("SELECT COUNT(*) as count FROM bookings WHERE status = 'missed'")
+        missed_bookings = cursor.fetchone()["count"]
+        
+        # Booking trends (last 30 days)
+        thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+        cursor.execute("""
+            SELECT COUNT(*) as count FROM bookings 
+            WHERE created_at >= ?
+        """, (thirty_days_ago,))
+        bookings_last_30_days = cursor.fetchone()["count"]
+        
+        # Booking trends (last 7 days)
+        seven_days_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+        cursor.execute("""
+            SELECT COUNT(*) as count FROM bookings 
+            WHERE created_at >= ?
+        """, (seven_days_ago,))
+        bookings_last_7_days = cursor.fetchone()["count"]
+        
+        # Average booking duration
+        cursor.execute("SELECT AVG(duration) as avg_duration FROM bookings")
+        avg_duration_result = cursor.fetchone()
+        avg_duration = round(avg_duration_result["avg_duration"], 2) if avg_duration_result["avg_duration"] else 0
+        
+        report["bookings"] = {
+            "total": total_bookings,
+            "by_status": {
+                "pending": pending_bookings,
+                "confirmed": confirmed_bookings,
+                "accepted": accepted_bookings,
+                "completed": completed_bookings,
+                "cancelled": cancelled_bookings,
+                "denied": denied_bookings,
+                "missed": missed_bookings
+            },
+            "trends": {
+                "last_7_days": bookings_last_7_days,
+                "last_30_days": bookings_last_30_days
+            },
+            "average_duration_minutes": avg_duration
+        }
+        
+        # Tutor Statistics
+        cursor.execute("SELECT AVG(rating) as avg_rating FROM tutors WHERE rating > 0")
+        avg_rating_result = cursor.fetchone()
+        avg_rating = round(avg_rating_result["avg_rating"], 2) if avg_rating_result["avg_rating"] else 0
+        
+        cursor.execute("SELECT AVG(hourly_rate) as avg_rate FROM tutors WHERE verified = 1")
+        avg_rate_result = cursor.fetchone()
+        avg_rate = round(avg_rate_result["avg_rate"], 2) if avg_rate_result["avg_rate"] else 0
+        
+        cursor.execute("SELECT MIN(hourly_rate) as min_rate FROM tutors WHERE verified = 1")
+        min_rate_result = cursor.fetchone()
+        min_rate = round(min_rate_result["min_rate"], 2) if min_rate_result["min_rate"] else 0
+        
+        cursor.execute("SELECT MAX(hourly_rate) as max_rate FROM tutors WHERE verified = 1")
+        max_rate_result = cursor.fetchone()
+        max_rate = round(max_rate_result["max_rate"], 2) if max_rate_result["max_rate"] else 0
+        
+        # Top tutors by rating
+        cursor.execute("""
+            SELECT tutor_id, first_name, last_name, rating, hourly_rate, 
+                   (SELECT COUNT(*) FROM bookings WHERE tutor_id = tutors.tutor_id) as booking_count
+            FROM tutors 
+            WHERE verified = 1 AND rating > 0
+            ORDER BY rating DESC, booking_count DESC
+            LIMIT 5
+        """)
+        top_tutors = [
+            {
+                "tutor_id": t["tutor_id"],
+                "name": f"{t['first_name']} {t['last_name']}",
+                "rating": round(t["rating"], 2),
+                "hourly_rate": t["hourly_rate"],
+                "total_bookings": t["booking_count"]
+            }
+            for t in cursor.fetchall()
+        ]
+        
+        report["tutors"] = {
+            "average_rating": avg_rating,
+            "average_hourly_rate": avg_rate,
+            "price_range": {
+                "min": min_rate,
+                "max": max_rate
+            },
+            "top_tutors": top_tutors
+        }
+        
+        # Module Popularity
+        cursor.execute("""
+            SELECT module, COUNT(*) as count 
+            FROM bookings 
+            WHERE module IS NOT NULL AND module != ''
+            GROUP BY module 
+            ORDER BY count DESC 
+            LIMIT 10
+        """)
+        popular_modules = [
+            {
+                "module": m["module"],
+                "booking_count": m["count"]
+            }
+            for m in cursor.fetchall()
+        ]
+        
+        report["modules"] = {
+            "most_popular": popular_modules
+        }
+        
+        # Review Statistics
+        cursor.execute("SELECT COUNT(*) as count FROM reviews")
+        total_reviews = cursor.fetchone()["count"]
+        
+        cursor.execute("SELECT AVG(rating) as avg_rating FROM reviews")
+        avg_review_rating_result = cursor.fetchone()
+        avg_review_rating = round(avg_review_rating_result["avg_rating"], 2) if avg_review_rating_result["avg_rating"] else 0
+        
+        cursor.execute("""
+            SELECT rating, COUNT(*) as count 
+            FROM reviews 
+            GROUP BY rating 
+            ORDER BY rating DESC
+        """)
+        rating_distribution = {
+            str(r["rating"]): r["count"]
+            for r in cursor.fetchall()
+        }
+        
+        report["reviews"] = {
+            "total": total_reviews,
+            "average_rating": avg_review_rating,
+            "rating_distribution": rating_distribution
+        }
+        
+        # Recent Activity (last 10 bookings)
+        cursor.execute("""
+            SELECT b.*, 
+                   s.first_name as learner_first_name, s.last_name as learner_last_name,
+                   t.first_name as tutor_first_name, t.last_name as tutor_last_name
+            FROM bookings b
+            JOIN students s ON b.learner_id = s.id
+            JOIN tutors t ON b.tutor_id = t.tutor_id
+            ORDER BY b.created_at DESC
+            LIMIT 10
+        """)
+        recent_bookings = [
+            {
+                "booking_id": b["booking_id"],
+                "learner_name": f"{b['learner_first_name']} {b['learner_last_name']}",
+                "tutor_name": f"{b['tutor_first_name']} {b['tutor_last_name']}",
+                "session_date": b["session_date"],
+                "status": b["status"],
+                "created_at": b["created_at"]
+            }
+            for b in cursor.fetchall()
+        ]
+        
+        report["recent_activity"] = {
+            "recent_bookings": recent_bookings
+        }
+        
+        # Summary Statistics
+        completion_rate = (completed_bookings / total_bookings * 100) if total_bookings > 0 else 0
+        cancellation_rate = ((cancelled_bookings + denied_bookings) / total_bookings * 100) if total_bookings > 0 else 0
+        
+        report["summary"] = {
+            "total_users": report["users"]["total_users"],
+            "total_bookings": total_bookings,
+            "total_tutors": verified_tutor_count,
+            "completion_rate_percent": round(completion_rate, 2),
+            "cancellation_rate_percent": round(cancellation_rate, 2),
+            "average_tutor_rating": avg_rating,
+            "total_reviews": total_reviews
+        }
+        
+        conn.close()
+        return jsonify(report), 200
+        
+    except sqlite3.Error as e:
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"Error generating report: {str(e)}"}), 500
+# End Iteration 4 - Admin platform report
 
 # Story 12 - Create review endpoint
 # Story 12 - create review
@@ -1300,6 +1856,145 @@ def get_review_for_booking(booking_id):
         if conn:
             conn.close()
 # End Story 12 - Check review
+
+# Iteration 4 - Admin user management endpoints
+# ref: Flask request handling - https://flask.palletsprojects.com/en/3.0.x/api/#flask.Request
+@app.route('/api/admin/users', methods=['GET'])
+def get_all_users():
+    """
+    Gets all users in the system for admin management.
+    Includes user email, role, account status, and linked records.
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get all users with their linked student/tutor information
+        cursor.execute("""
+            SELECT 
+                u.user_id,
+                u.email,
+                u.role,
+                u.is_active,
+                u.student_id,
+                u.tutor_id,
+                u.created_at,
+                u.updated_at,
+                s.first_name as student_first_name,
+                s.last_name as student_last_name,
+                t.first_name as tutor_first_name,
+                t.last_name as tutor_last_name,
+                t.verified as tutor_verified
+            FROM users u
+            LEFT JOIN students s ON u.student_id = s.id
+            LEFT JOIN tutors t ON u.tutor_id = t.tutor_id
+            ORDER BY u.created_at DESC
+        """)
+        users = cursor.fetchall()
+        conn.close()
+        
+        # Convert to list of dictionaries
+        user_list = []
+        for u in users:
+            # Iteration 4 - Safely get is_active (handle legacy accounts)
+            try:
+                is_active = u["is_active"]
+                if is_active is None:
+                    is_active = 1  # Default to active for legacy accounts
+            except (KeyError, IndexError):
+                is_active = 1  # Default to active if column doesn't exist
+            
+            user_list.append({
+                "user_id": u["user_id"],
+                "email": u["email"],
+                "role": u["role"],
+                "is_active": is_active,
+                "student_id": u["student_id"],
+                "tutor_id": u["tutor_id"],
+                "created_at": u["created_at"],
+                "updated_at": u["updated_at"],
+                "student_name": f"{u['student_first_name']} {u['student_last_name']}".strip() if u["student_first_name"] else None,
+                "tutor_name": f"{u['tutor_first_name']} {u['tutor_last_name']}".strip() if u["tutor_first_name"] else None,
+                "tutor_verified": u["tutor_verified"] if u["tutor_verified"] is not None else None
+            })
+        
+        return jsonify(user_list), 200
+    except sqlite3.Error as e:
+        if conn:
+            conn.close()
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    except Exception as e:
+        if conn:
+            conn.close()
+        print(f"[ERROR] Unexpected error in get_all_users: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
+
+@app.route('/api/admin/users/<int:user_id>/status', methods=['PUT'])
+def update_user_status(user_id):
+    """
+    Updates a user's account status (activate/deactivate).
+    Only admins can perform this action.
+    """
+    conn = None
+    try:
+        data = request.get_json()
+        is_active = data.get('is_active')
+        
+        # Validate is_active value
+        if is_active is None:
+            return jsonify({"error": "Missing required field: is_active"}), 400
+        
+        # Convert to integer (0 or 1)
+        is_active = 1 if is_active else 0
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Check if user exists
+        cursor.execute("SELECT user_id, email, role FROM users WHERE user_id = ?", (user_id,))
+        user = cursor.fetchone()
+        
+        if not user:
+            conn.close()
+            return jsonify({"error": "User not found"}), 404
+        
+        # Prevent deactivating admin accounts (safety measure)
+        if user["role"] == "admin" and is_active == 0:
+            conn.close()
+            return jsonify({"error": "Cannot deactivate admin accounts"}), 400
+        
+        # Update user status
+        now = datetime.now()
+        cursor.execute("""
+            UPDATE users 
+            SET is_active = ?, updated_at = ?
+            WHERE user_id = ?
+        """, (is_active, now, user_id))
+        conn.commit()
+        conn.close()
+        
+        status_text = "activated" if is_active == 1 else "deactivated"
+        return jsonify({
+            "message": f"User account {status_text} successfully",
+            "user_id": user_id,
+            "email": user["email"],
+            "is_active": is_active
+        }), 200
+    except sqlite3.Error as e:
+        if conn:
+            conn.rollback()
+            conn.close()
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    except Exception as e:
+        if conn:
+            conn.rollback()
+            conn.close()
+        print(f"[ERROR] Unexpected error in update_user_status: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
 
 # Story 9 - admin view all reviews
 @app.route('/api/admin/reviews', methods=['GET'])
@@ -1482,6 +2177,110 @@ def get_tutor_by_id(tutor_id):
             conn.close()
 # End Story 10 - Get tutor by ID
 
+# UX Improvement - Get tutor profile with reviews for public viewing
+@app.route('/api/tutors/<int:tutor_id>/profile', methods=['GET'])
+def get_tutor_profile(tutor_id):
+    """
+    Gets a tutor's public profile including all reviews and statistics.
+    Used for displaying tutor profile page to learners.
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get tutor information
+        cursor.execute("SELECT * FROM tutors WHERE tutor_id = ? AND verified = 1", (tutor_id,))
+        tutor = cursor.fetchone()
+        
+        if not tutor:
+            return jsonify({"error": "Tutor not found or not verified"}), 404
+        
+        # Get all reviews for this tutor
+        cursor.execute("""
+            SELECT r.*, 
+                   s.first_name as learner_first_name, 
+                   s.last_name as learner_last_name,
+                   b.session_date,
+                   b.module
+            FROM reviews r
+            JOIN students s ON r.learner_id = s.id
+            LEFT JOIN bookings b ON r.booking_id = b.booking_id
+            WHERE r.tutor_id = ?
+            ORDER BY r.created_at DESC
+        """, (tutor_id,))
+        reviews = cursor.fetchall()
+        
+        # Calculate review statistics
+        total_reviews = len(reviews)
+        rating_counts = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+        for review in reviews:
+            rating = review["rating"]
+            if rating in rating_counts:
+                rating_counts[rating] += 1
+        
+        # Get booking statistics
+        cursor.execute("""
+            SELECT 
+                COUNT(*) as total_bookings,
+                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_bookings,
+                SUM(CASE WHEN status = 'confirmed' OR status = 'accepted' THEN 1 ELSE 0 END) as confirmed_bookings
+            FROM bookings
+            WHERE tutor_id = ?
+        """, (tutor_id,))
+        booking_stats = cursor.fetchone()
+        
+        # Format reviews
+        review_list = [
+            {
+                "review_id": r["review_id"],
+                "rating": r["rating"],
+                "comment": r["comment"],
+                "learner_name": f"{r['learner_first_name']} {r['learner_last_name']}",
+                "module": r["module"] or "N/A",
+                "session_date": r["session_date"],
+                "created_at": r["created_at"]
+            }
+            for r in reviews
+        ]
+        
+        # Format tutor profile data
+        profile_data = {
+            "tutor_id": tutor["tutor_id"],
+            "first_name": tutor["first_name"],
+            "last_name": tutor["last_name"],
+            "college_email": tutor["college_email"],
+            "modules": tutor["modules"],
+            "hourly_rate": tutor["hourly_rate"],
+            "rating": tutor["rating"],
+            "bio": tutor["bio"],
+            "profile_pic": tutor["profile_pic"],
+            "verified": tutor["verified"],
+            "created_at": tutor["created_at"],
+            "reviews": review_list,
+            "review_stats": {
+                "total_reviews": total_reviews,
+                "average_rating": tutor["rating"],
+                "rating_distribution": rating_counts
+            },
+            "booking_stats": {
+                "total_bookings": booking_stats["total_bookings"] or 0,
+                "completed_bookings": booking_stats["completed_bookings"] or 0,
+                "confirmed_bookings": booking_stats["confirmed_bookings"] or 0
+            }
+        }
+        
+        return jsonify(profile_data), 200
+    except sqlite3.Error as e:
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
+    finally:
+        if conn:
+            conn.close()
+
 # Story 10 - Update tutor profile endpoint
 # Story 10 - update tutor profile
 @app.route('/api/tutors/<int:tutor_id>', methods=['PUT'])
@@ -1526,6 +2325,819 @@ def update_tutor_profile(tutor_id):
 ###################
 ###################
 # End Iteration 3 - Tutor profile edit routes
+###################
+###################
+
+###################
+###################
+# Iteration 4 - Tutor Availability and Booking Confirmation System
+# ref: Flask REST API tutorial - https://flask.palletsprojects.com/en/3.0.x/quickstart/#routing
+###################
+###################
+
+# Set tutor availability
+@app.route('/api/tutors/<int:tutor_id>/availability', methods=['POST', 'PUT'])
+def set_tutor_availability(tutor_id):
+    """
+    Sets or updates tutor availability.
+    Expects JSON with: day_of_week (0-6), start_time, end_time, is_available (1 or 0)
+    """
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+    
+    day_of_week = data.get('day_of_week')
+    start_time = data.get('start_time')
+    end_time = data.get('end_time')
+    is_available = data.get('is_available', 1)
+    
+    # Validate required fields
+    if day_of_week is None or not start_time or not end_time:
+        return jsonify({"error": "Missing required fields: day_of_week, start_time, end_time"}), 400
+    
+    # Validate day_of_week (0-6)
+    try:
+        day_of_week = int(day_of_week)
+        if day_of_week < 0 or day_of_week > 6:
+            return jsonify({"error": "day_of_week must be between 0 (Monday) and 6 (Sunday)"}), 400
+    except (ValueError, TypeError):
+        return jsonify({"error": "day_of_week must be a number"}), 400
+    
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Check if tutor exists
+        cursor.execute("SELECT tutor_id FROM tutors WHERE tutor_id = ?", (tutor_id,))
+        if not cursor.fetchone():
+            return jsonify({"error": "Tutor not found"}), 404
+        
+        # Check if availability already exists for this day
+        cursor.execute("""
+            SELECT availability_id FROM tutor_availability 
+            WHERE tutor_id = ? AND day_of_week = ?
+        """, (tutor_id, day_of_week))
+        existing = cursor.fetchone()
+        
+        now = datetime.now()
+        if existing:
+            # Update existing availability
+            cursor.execute("""
+                UPDATE tutor_availability 
+                SET start_time = ?, end_time = ?, is_available = ?, updated_at = ?
+                WHERE tutor_id = ? AND day_of_week = ?
+            """, (start_time, end_time, is_available, now, tutor_id, day_of_week))
+        else:
+            # Insert new availability
+            cursor.execute("""
+                INSERT INTO tutor_availability (tutor_id, day_of_week, start_time, end_time, is_available, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (tutor_id, day_of_week, start_time, end_time, is_available, now, now))
+        
+        conn.commit()
+        return jsonify({"message": "Availability updated successfully"}), 200
+    except sqlite3.Error as e:
+        if conn:
+            conn.rollback()
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    finally:
+        if conn:
+            conn.close()
+
+# Get tutor availability
+@app.route('/api/tutors/<int:tutor_id>/availability', methods=['GET'])
+def get_tutor_availability(tutor_id):
+    """
+    Gets all availability slots for a tutor.
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT * FROM tutor_availability 
+            WHERE tutor_id = ? AND is_available = 1
+            ORDER BY day_of_week, start_time
+        """, (tutor_id,))
+        
+        availability = cursor.fetchall()
+        
+        availability_list = [
+            {
+                "availability_id": a["availability_id"],
+                "day_of_week": a["day_of_week"],
+                "start_time": a["start_time"],
+                "end_time": a["end_time"],
+                "is_available": a["is_available"]
+            }
+            for a in availability
+        ]
+        
+        return jsonify(availability_list), 200
+    except sqlite3.Error as e:
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    finally:
+        if conn:
+            conn.close()
+
+# Get available time slots for a specific date
+@app.route('/api/tutors/<int:tutor_id>/available-slots', methods=['GET'])
+def get_available_slots(tutor_id):
+    """
+    Gets available time slots for a tutor on a specific date.
+    Takes query parameter: date (YYYY-MM-DD)
+    Returns available time slots based on:
+    1. Tutor's weekly availability
+    2. Existing bookings on that date
+    """
+    date_str = request.args.get('date')
+    if not date_str:
+        return jsonify({"error": "Missing required parameter: date"}), 400
+    
+    try:
+        # Parse the date and get day of week (0=Monday, 6=Sunday)
+        booking_date = datetime.strptime(date_str, "%Y-%m-%d")
+        day_of_week = booking_date.weekday()  # 0=Monday, 6=Sunday
+    except ValueError:
+        return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
+    
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get tutor's availability for this day of week
+        cursor.execute("""
+            SELECT start_time, end_time FROM tutor_availability 
+            WHERE tutor_id = ? AND day_of_week = ? AND is_available = 1
+        """, (tutor_id, day_of_week))
+        
+        availability = cursor.fetchone()
+        if not availability:
+            return jsonify({"available_slots": [], "message": "Tutor not available on this day"}), 200
+        
+        start_time_str = availability["start_time"]
+        end_time_str = availability["end_time"]
+        
+        # Iteration 4 - Parse times (handle both HH:MM and HH:MM:SS formats)
+        # Split and take only first 2 parts (hour and minute), ignore seconds if present
+        # ref: Python string split - https://www.w3schools.com/python/ref_string_split.asp
+        # ref: Python datetime parsing - https://docs.python.org/3/library/datetime.html#strftime-strptime-behavior
+        start_parts = start_time_str.split(':')
+        end_parts = end_time_str.split(':')
+        start_hour, start_min = int(start_parts[0]), int(start_parts[1])
+        end_hour, end_min = int(end_parts[0]), int(end_parts[1])
+        
+        # Get existing bookings for this date
+        cursor.execute("""
+            SELECT session_time, duration FROM bookings 
+            WHERE tutor_id = ? AND session_date = ? AND status IN ('pending', 'confirmed')
+        """, (tutor_id, date_str))
+        
+        existing_bookings = cursor.fetchall()
+        
+        # Generate 30-minute time slots
+        available_slots = []
+        current_hour = start_hour
+        current_min = start_min
+        
+        while (current_hour < end_hour) or (current_hour == end_hour and current_min < end_min):
+            slot_time = f"{current_hour:02d}:{current_min:02d}"
+            slot_datetime = datetime.strptime(f"{date_str} {slot_time}", "%Y-%m-%d %H:%M")
+            slot_end = slot_datetime + timedelta(minutes=30)
+            
+            # Check if this slot conflicts with existing bookings
+            is_available = True
+            for booking in existing_bookings:
+                booking_time_str = booking["session_time"]
+                if isinstance(booking_time_str, str):
+                    booking_hour, booking_min = map(int, booking_time_str.split(':')[:2])
+                    booking_datetime = datetime.strptime(f"{date_str} {booking_hour:02d}:{booking_min:02d}", "%Y-%m-%d %H:%M")
+                    booking_duration = booking["duration"] or 60
+                    booking_end = booking_datetime + timedelta(minutes=booking_duration)
+                    
+                    # Check for overlap
+                    if not (slot_end <= booking_datetime or slot_datetime >= booking_end):
+                        is_available = False
+                        break
+            
+            if is_available:
+                available_slots.append(slot_time)
+            
+            # Move to next 30-minute slot
+            current_min += 30
+            if current_min >= 60:
+                current_min = 0
+                current_hour += 1
+        
+        return jsonify({
+            "date": date_str,
+            "available_slots": available_slots,
+            "tutor_availability": {
+                "start_time": start_time_str,
+                "end_time": end_time_str
+            }
+        }), 200
+    except sqlite3.Error as e:
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"Error generating slots: {str(e)}"}), 500
+    finally:
+        if conn:
+            conn.close()
+
+# Tutor accept booking
+@app.route('/api/bookings/<int:booking_id>/accept', methods=['PUT'])
+def accept_booking(booking_id):
+    """
+    Allows tutor to accept a pending booking.
+    Changes status from 'pending' to 'confirmed'.
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Check if booking exists and is pending
+        cursor.execute("SELECT * FROM bookings WHERE booking_id = ?", (booking_id,))
+        booking = cursor.fetchone()
+        
+        if not booking:
+            return jsonify({"error": "Booking not found"}), 404
+        
+        if booking["status"] != "pending":
+            return jsonify({"error": f"Booking is already {booking['status']}. Only pending bookings can be accepted."}), 400
+        
+        # Update status to confirmed
+        cursor.execute("""
+            UPDATE bookings 
+            SET status = 'confirmed', updated_at = ?
+            WHERE booking_id = ?
+        """, (datetime.now(), booking_id))
+        
+        conn.commit()
+        return jsonify({"message": "Booking accepted successfully", "booking_id": booking_id}), 200
+    except sqlite3.Error as e:
+        if conn:
+            conn.rollback()
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    finally:
+        if conn:
+            conn.close()
+
+# Tutor deny/reject booking
+@app.route('/api/bookings/<int:booking_id>/deny', methods=['PUT'])
+def deny_booking(booking_id):
+    """
+    Allows tutor to deny/reject a pending booking.
+    Changes status from 'pending' to 'cancelled'.
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Check if booking exists and is pending
+        cursor.execute("SELECT * FROM bookings WHERE booking_id = ?", (booking_id,))
+        booking = cursor.fetchone()
+        
+        if not booking:
+            return jsonify({"error": "Booking not found"}), 404
+        
+        if booking["status"] != "pending":
+            return jsonify({"error": f"Booking is already {booking['status']}. Only pending bookings can be denied."}), 400
+        
+        # Update status to cancelled
+        cursor.execute("""
+            UPDATE bookings 
+            SET status = 'cancelled', updated_at = ?
+            WHERE booking_id = ?
+        """, (datetime.now(), booking_id))
+        
+        conn.commit()
+        return jsonify({"message": "Booking denied successfully", "booking_id": booking_id}), 200
+    except sqlite3.Error as e:
+        if conn:
+            conn.rollback()
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    finally:
+        if conn:
+            conn.close()
+
+# Iteration 4 - Send a message for a booking
+# ChatGPT conversation reference: https://chatgpt.com/share/6984af21-d9ac-8008-a016-f00a20286dd1
+@app.route('/api/bookings/<int:booking_id>/messages', methods=['POST'])
+def send_message(booking_id):
+    """
+    Allows learners and tutors to send messages for accepted bookings.
+    Only works for bookings with status 'confirmed' or 'accepted'.
+    """
+    data = request.get_json()
+    sender_id = data.get('sender_id')
+    sender_role = data.get('sender_role')  # 'learner' or 'tutor'
+    message_text = data.get('message_text', '').strip()
+    
+    # Validate required fields
+    if not all([sender_id, sender_role, message_text]):
+        return jsonify({"error": "Missing required fields: sender_id, sender_role, and message_text"}), 400
+    
+    # Validate sender_role
+    if sender_role not in ['learner', 'tutor']:
+        return jsonify({"error": "sender_role must be 'learner' or 'tutor'"}), 400
+    
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Check if booking exists and is confirmed/accepted
+        cursor.execute("SELECT * FROM bookings WHERE booking_id = ?", (booking_id,))
+        booking = cursor.fetchone()
+        
+        if not booking:
+            return jsonify({"error": "Booking not found"}), 404
+        
+        # Only allow messaging for confirmed/accepted bookings
+        if booking["status"] not in ['confirmed', 'accepted']:
+            return jsonify({"error": f"Messaging is only available for confirmed bookings. Current status: {booking['status']}"}), 400
+        
+        # Verify sender is part of this booking
+        if sender_role == 'learner':
+            if booking["learner_id"] != sender_id:
+                return jsonify({"error": "You are not authorized to send messages for this booking"}), 403
+        else:  # sender_role == 'tutor'
+            if booking["tutor_id"] != sender_id:
+                return jsonify({"error": "You are not authorized to send messages for this booking"}), 403
+        
+        # Insert message into database
+        now = datetime.now()
+        cursor.execute("""
+            INSERT INTO messages (booking_id, sender_id, sender_role, message_text, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (booking_id, sender_id, sender_role, message_text, now))
+        
+        conn.commit()
+        message_id = cursor.lastrowid
+        
+        return jsonify({
+            "message": "Message sent successfully",
+            "message_id": message_id,
+            "booking_id": booking_id
+        }), 201
+    except sqlite3.Error as e:
+        if conn:
+            conn.rollback()
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    finally:
+        if conn:
+            conn.close()
+
+# Iteration 4 - Get all messages for a booking
+# ChatGPT conversation reference: https://chatgpt.com/share/6984af21-d9ac-8008-a016-f00a20286dd1
+@app.route('/api/bookings/<int:booking_id>/messages', methods=['GET'])
+def get_booking_messages(booking_id):
+    """
+    Retrieves all messages for a specific booking.
+    Only accessible by the learner or tutor associated with the booking.
+    """
+    # Get query parameters for authorization
+    user_id = request.args.get('user_id', type=int)
+    user_role = request.args.get('user_role')
+    
+    if not user_id or not user_role:
+        return jsonify({"error": "Missing required query parameters: user_id and user_role"}), 400
+    
+    if user_role not in ['learner', 'tutor']:
+        return jsonify({"error": "user_role must be 'learner' or 'tutor'"}), 400
+    
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Check if booking exists
+        cursor.execute("SELECT * FROM bookings WHERE booking_id = ?", (booking_id,))
+        booking = cursor.fetchone()
+        
+        if not booking:
+            return jsonify({"error": "Booking not found"}), 404
+        
+        # Verify user is part of this booking
+        if user_role == 'learner':
+            if booking["learner_id"] != user_id:
+                return jsonify({"error": "You are not authorized to view messages for this booking"}), 403
+        else:  # user_role == 'tutor'
+            if booking["tutor_id"] != user_id:
+                return jsonify({"error": "You are not authorized to view messages for this booking"}), 403
+        
+        # Get all messages for this booking, ordered by creation time
+        cursor.execute("""
+            SELECT message_id, booking_id, sender_id, sender_role, message_text, 
+                   read_at, created_at
+            FROM messages
+            WHERE booking_id = ?
+            ORDER BY created_at ASC
+        """, (booking_id,))
+        
+        messages = cursor.fetchall()
+        
+        # Convert to list of dictionaries
+        message_list = [
+            {
+                "message_id": msg["message_id"],
+                "booking_id": msg["booking_id"],
+                "sender_id": msg["sender_id"],
+                "sender_role": msg["sender_role"],
+                "message_text": msg["message_text"],
+                "read_at": msg["read_at"],
+                "created_at": msg["created_at"]
+            }
+            for msg in messages
+        ]
+        
+        return jsonify(message_list), 200
+    except sqlite3.Error as e:
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    finally:
+        if conn:
+            conn.close()
+
+# Iteration 4 - Get all messages for a user (learner or tutor)
+# ChatGPT conversation reference: https://chatgpt.com/share/6984af21-d9ac-8008-a016-f00a20286dd1
+@app.route('/api/messages', methods=['GET'])
+def get_user_messages():
+    """
+    Retrieves all messages for a user (learner or tutor) across all their bookings.
+    Groups messages by booking and includes booking details.
+    """
+    try:
+        user_id = request.args.get('user_id', type=int)
+        user_role = request.args.get('user_role')
+        
+        print(f"[INFO] get_user_messages called with user_id={user_id}, user_role={user_role}")
+        
+        if not user_id or not user_role:
+            print(f"[ERROR] Missing required parameters: user_id={user_id}, user_role={user_role}")
+            return jsonify({"error": "Missing required query parameters: user_id and user_role"}), 400
+        
+        if user_role not in ['learner', 'tutor']:
+            print(f"[ERROR] Invalid user_role: {user_role}")
+            return jsonify({"error": "user_role must be 'learner' or 'tutor'"}), 400
+        
+        conn = None
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get all bookings for this user
+        if user_role == 'learner':
+            cursor.execute("""
+                SELECT booking_id, tutor_id, session_date, session_time, status, module
+                FROM bookings
+                WHERE learner_id = ? AND status IN ('confirmed', 'accepted')
+            """, (user_id,))
+        else:  # user_role == 'tutor'
+            cursor.execute("""
+                SELECT booking_id, learner_id, session_date, session_time, status, module
+                FROM bookings
+                WHERE tutor_id = ? AND status IN ('confirmed', 'accepted')
+            """, (user_id,))
+        
+        bookings = cursor.fetchall()
+        
+        if not bookings:
+            return jsonify([]), 200
+        
+        # Get all messages for these bookings
+        booking_ids = [b["booking_id"] for b in bookings]
+        
+        # If no booking IDs, return empty list
+        if not booking_ids:
+            return jsonify([]), 200
+        
+        placeholders = ','.join(['?'] * len(booking_ids))
+        
+        cursor.execute(f"""
+            SELECT m.message_id, m.booking_id, m.sender_id, m.sender_role, 
+                   m.message_text, m.read_at, m.created_at,
+                   b.session_date, b.session_time, b.status, b.module
+            FROM messages m
+            JOIN bookings b ON m.booking_id = b.booking_id
+            WHERE m.booking_id IN ({placeholders})
+            ORDER BY b.booking_id DESC, m.created_at ASC
+        """, booking_ids)
+        
+        messages = cursor.fetchall()
+        
+        # If no messages, return empty list
+        if not messages:
+            return jsonify([]), 200
+        
+        # Get names for learners/tutors
+        result = []
+        booking_groups = {}
+        
+        for msg in messages:
+            booking_id = msg["booking_id"]
+            
+            if booking_id not in booking_groups:
+                # Get the other party's name
+                if user_role == 'learner':
+                    cursor.execute("""
+                        SELECT first_name, last_name, college_email
+                        FROM tutors
+                        WHERE tutor_id = (SELECT tutor_id FROM bookings WHERE booking_id = ?)
+                    """, (booking_id,))
+                else:  # user_role == 'tutor'
+                    cursor.execute("""
+                        SELECT first_name, last_name, college_email
+                        FROM students
+                        WHERE id = (SELECT learner_id FROM bookings WHERE booking_id = ?)
+                    """, (booking_id,))
+                
+                other_party = cursor.fetchone()
+                other_party_name = f"{other_party['first_name']} {other_party['last_name']}" if other_party else "Unknown"
+                
+                # Iteration 4 - Safely get module field
+                try:
+                    module_value = msg["module"] if msg["module"] else ""
+                except (KeyError, IndexError):
+                    module_value = ""
+                
+                booking_groups[booking_id] = {
+                    "booking_id": booking_id,
+                    "session_date": msg["session_date"],
+                    "session_time": msg["session_time"],
+                    "status": msg["status"],
+                    "module": module_value,
+                    "other_party_name": other_party_name,
+                    "messages": []
+                }
+            
+            booking_groups[booking_id]["messages"].append({
+                "message_id": msg["message_id"],
+                "sender_id": msg["sender_id"],
+                "sender_role": msg["sender_role"],
+                "message_text": msg["message_text"],
+                "read_at": msg["read_at"],
+                "created_at": msg["created_at"]
+            })
+        
+        # Convert to list
+        result = list(booking_groups.values())
+        
+        print(f"[INFO] Returning {len(result)} message groups")
+        return jsonify(result), 200
+    except sqlite3.Error as e:
+        print(f"[ERROR] Database error in get_user_messages: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    except Exception as e:
+        print(f"[ERROR] Unexpected error in get_user_messages: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
+    finally:
+        if conn:
+            conn.close()
+
+# Iteration 4 - Get learner earnings
+# ref: SQL JOIN - https://www.w3schools.com/sql/sql_join.asp
+@app.route('/api/learners/<int:learner_id>/earnings', methods=['GET'])
+def get_learner_earnings(learner_id):
+    """
+    Calculates and returns earnings for a learner.
+    Earnings can come from completed sessions, referrals, credits, etc.
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get all completed bookings for this learner
+        cursor.execute("""
+            SELECT b.booking_id, b.session_date, b.session_time, b.duration, b.status, b.module,
+                   t.first_name as tutor_first_name, t.last_name as tutor_last_name, t.hourly_rate
+            FROM bookings b
+            JOIN tutors t ON b.tutor_id = t.tutor_id
+            WHERE b.learner_id = ? AND b.status = 'completed'
+            ORDER BY b.session_date DESC, b.session_time DESC
+        """, (learner_id,))
+        
+        completed_bookings = cursor.fetchall()
+        
+        # Calculate earnings
+        total_earnings = 0.0
+        total_sessions = len(completed_bookings)
+        total_hours = 0.0
+        earnings_breakdown = []
+        
+        for booking in completed_bookings:
+            duration_minutes = booking["duration"] if booking["duration"] else 60
+            duration_hours = duration_minutes / 60.0
+            hourly_rate = booking["hourly_rate"] if booking["hourly_rate"] else 0.0
+            
+            # Iteration 4 - Calculate session cost (what learner paid)
+            session_cost = duration_hours * hourly_rate
+            
+            # Iteration 4 - For now, earnings = 0 (can be extended with referral credits, cashback, etc.)
+            # In a real system, learners might earn:
+            # - Referral bonuses
+            # - Cashback on sessions
+            # - Credits for completed sessions
+            session_earnings = 0.0  # Placeholder - can be extended later
+            
+            total_earnings += session_earnings
+            total_hours += duration_hours
+            
+            # Safely get module
+            try:
+                module_value = booking["module"] if booking["module"] else ""
+            except (KeyError, IndexError):
+                module_value = ""
+            
+            earnings_breakdown.append({
+                "booking_id": booking["booking_id"],
+                "session_date": booking["session_date"],
+                "session_time": booking["session_time"],
+                "duration_hours": round(duration_hours, 2),
+                "tutor_name": f"{booking['tutor_first_name']} {booking['tutor_last_name']}",
+                "hourly_rate": hourly_rate,
+                "session_cost": round(session_cost, 2),
+                "earnings": round(session_earnings, 2),
+                "module": module_value
+            })
+        
+        # Get pending/confirmed bookings (potential future earnings)
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM bookings
+            WHERE learner_id = ? AND status IN ('pending', 'confirmed', 'accepted')
+        """, (learner_id,))
+        pending_count = cursor.fetchone()["count"]
+        
+        result = {
+            "learner_id": learner_id,
+            "total_earnings": round(total_earnings, 2),
+            "total_sessions_completed": total_sessions,
+            "total_hours": round(total_hours, 2),
+            "pending_sessions": pending_count,
+            "earnings_breakdown": earnings_breakdown
+        }
+        
+        return jsonify(result), 200
+    except sqlite3.Error as e:
+        print(f"[ERROR] Database error in get_learner_earnings: {str(e)}")
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    except Exception as e:
+        print(f"[ERROR] Unexpected error in get_learner_earnings: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
+    finally:
+        if conn:
+            conn.close()
+
+# Iteration 4 - Get tutor earnings
+# ref: Python datetime calculations - https://docs.python.org/3/library/datetime.html
+@app.route('/api/tutors/<int:tutor_id>/earnings', methods=['GET'])
+def get_tutor_earnings(tutor_id):
+    """
+    Calculates and returns earnings for a tutor.
+    Earnings come from completed tutoring sessions.
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get tutor's hourly rate
+        cursor.execute("SELECT hourly_rate FROM tutors WHERE tutor_id = ?", (tutor_id,))
+        tutor = cursor.fetchone()
+        
+        if not tutor:
+            return jsonify({"error": "Tutor not found"}), 404
+        
+        hourly_rate = tutor["hourly_rate"] if tutor["hourly_rate"] else 0.0
+        
+        # Get all completed bookings for this tutor
+        cursor.execute("""
+            SELECT b.booking_id, b.session_date, b.session_time, b.duration, b.status, b.module,
+                   s.first_name as learner_first_name, s.last_name as learner_last_name
+            FROM bookings b
+            JOIN students s ON b.learner_id = s.id
+            WHERE b.tutor_id = ? AND b.status = 'completed'
+            ORDER BY b.session_date DESC, b.session_time DESC
+        """, (tutor_id,))
+        
+        completed_bookings = cursor.fetchall()
+        
+        # Calculate earnings
+        total_earnings = 0.0
+        total_sessions = len(completed_bookings)
+        total_hours = 0.0
+        earnings_breakdown = []
+        
+        for booking in completed_bookings:
+            duration_minutes = booking["duration"] if booking["duration"] else 60
+            duration_hours = duration_minutes / 60.0
+            
+            # Iteration 4 - Calculate session earnings (tutor earns based on hourly rate and duration)
+            session_earnings = duration_hours * hourly_rate
+            
+            total_earnings += session_earnings
+            total_hours += duration_hours
+            
+            # Safely get module
+            try:
+                module_value = booking["module"] if booking["module"] else ""
+            except (KeyError, IndexError):
+                module_value = ""
+            
+            earnings_breakdown.append({
+                "booking_id": booking["booking_id"],
+                "session_date": booking["session_date"],
+                "session_time": booking["session_time"],
+                "duration_hours": round(duration_hours, 2),
+                "learner_name": f"{booking['learner_first_name']} {booking['learner_last_name']}",
+                "hourly_rate": hourly_rate,
+                "earnings": round(session_earnings, 2),
+                "module": module_value
+            })
+        
+        # Get pending/confirmed bookings (potential future earnings)
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM bookings
+            WHERE tutor_id = ? AND status IN ('pending', 'confirmed', 'accepted')
+        """, (tutor_id,))
+        pending_count = cursor.fetchone()["count"]
+        
+        result = {
+            "tutor_id": tutor_id,
+            "hourly_rate": hourly_rate,
+            "total_earnings": round(total_earnings, 2),
+            "total_sessions_completed": total_sessions,
+            "total_hours": round(total_hours, 2),
+            "pending_sessions": pending_count,
+            "earnings_breakdown": earnings_breakdown
+        }
+        
+        return jsonify(result), 200
+    except sqlite3.Error as e:
+        print(f"[ERROR] Database error in get_tutor_earnings: {str(e)}")
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    except Exception as e:
+        print(f"[ERROR] Unexpected error in get_tutor_earnings: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
+    finally:
+        if conn:
+            conn.close()
+
+# Iteration 4 - Mark message as read
+# ChatGPT conversation reference: https://chatgpt.com/share/6984af21-d9ac-8008-a016-f00a20286dd1
+@app.route('/api/messages/<int:message_id>/read', methods=['PUT'])
+def mark_message_read(message_id):
+    """
+    Marks a message as read by setting read_at timestamp.
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Check if message exists
+        cursor.execute("SELECT * FROM messages WHERE message_id = ?", (message_id,))
+        message = cursor.fetchone()
+        
+        if not message:
+            return jsonify({"error": "Message not found"}), 404
+        
+        # Update read_at timestamp
+        cursor.execute("""
+            UPDATE messages 
+            SET read_at = ?
+            WHERE message_id = ?
+        """, (datetime.now(), message_id))
+        
+        conn.commit()
+        return jsonify({"message": "Message marked as read", "message_id": message_id}), 200
+    except sqlite3.Error as e:
+        if conn:
+            conn.rollback()
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    finally:
+        if conn:
+            conn.close()
+
+###################
+###################
+# End Iteration 4 - Tutor Availability, Booking Confirmation, and Messaging
 ###################
 ###################
 
@@ -1650,6 +3262,20 @@ def login_user():
         if not user:
             return jsonify({"error": "Invalid email or password"}), 401
         
+        # Iteration 4 - Check if account is active
+        # sqlite3.Row doesn't support .get(), so use try/except or direct access
+        try:
+            is_active = user["is_active"]
+        except (KeyError, IndexError):
+            # Handle legacy accounts (set to active by default if column doesn't exist)
+            is_active = 1
+        
+        if is_active is None:
+            # Handle legacy accounts (set to active by default)
+            is_active = 1
+        if is_active == 0:
+            return jsonify({"error": "Your account has been deactivated. Please contact an administrator."}), 403
+        
         # Verify password (simple hash comparison - NOT secure for production!)
         import hashlib
         password_hash = hashlib.sha256(password.encode()).hexdigest()
@@ -1751,6 +3377,84 @@ def login_user():
 def health_check():
     """Simple health check endpoint to verify server is running"""
     return jsonify({"status": "ok", "message": "Server is running"}), 200
+
+# Iteration 4 - API Test Endpoints
+@app.route('/api/test/timezone', methods=['GET'])
+def test_timezone_api():
+    """Test endpoint for timezone API"""
+    # Reference: https://chatgpt.com/share/6984a96d-f0cc-8008-abdc-dc3fe4261951
+    try:
+        from api_integrations import get_timezone_info
+        result = get_timezone_info()
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/test/email', methods=['POST'])
+def test_email_api():
+    """Test endpoint for email API (requires SendGrid setup)"""
+    # Reference: https://chatgpt.com/share/6984a96d-f0cc-8008-abdc-dc3fe4261951
+    try:
+        from api_integrations import send_booking_confirmation_email
+        data = request.get_json()
+        
+        # Test with sample data
+        result = send_booking_confirmation_email(
+            data.get('learner_email', 'test@example.com'),
+            data.get('tutor_email', 'tutor@example.com'),
+            data.get('learner_name', 'Test Learner'),
+            data.get('tutor_name', 'Test Tutor'),
+            {
+                'session_date': data.get('session_date', '2024-01-01'),
+                'session_time': data.get('session_time', '10:00'),
+                'duration': data.get('duration', 60)
+            }
+        )
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/test/google-calendar', methods=['GET'])
+def test_google_calendar_api():
+    """Test endpoint for Google Calendar API - checks if it's configured"""
+    # Reference: https://chatgpt.com/share/6984a96d-f0cc-8008-abdc-dc3fe4261951
+    try:
+        from config import ENABLE_GOOGLE_CALENDAR, GOOGLE_CALENDAR_CREDENTIALS_FILE
+        from pathlib import Path
+        import os
+        
+        BASE_DIR = Path(__file__).resolve().parent
+        credentials_path = BASE_DIR / GOOGLE_CALENDAR_CREDENTIALS_FILE
+        
+        status = {
+            "enabled": ENABLE_GOOGLE_CALENDAR,
+            "credentials_file_exists": credentials_path.exists(),
+            "credentials_file_path": str(credentials_path),
+            "dependencies_installed": False
+        }
+        
+        # Check if dependencies are installed
+        try:
+            import google.auth.transport.requests
+            import google.oauth2.credentials
+            import google_auth_oauthlib.flow
+            import googleapiclient.discovery
+            status["dependencies_installed"] = True
+        except ImportError as e:
+            status["dependencies_error"] = str(e)
+        
+        if not ENABLE_GOOGLE_CALENDAR:
+            status["message"] = "Google Calendar API is disabled in config.py"
+        elif not credentials_path.exists():
+            status["message"] = f"credentials.json not found at {credentials_path}. See API_SETUP.md for setup instructions."
+        elif not status["dependencies_installed"]:
+            status["message"] = "Google Calendar dependencies not installed. Run: pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib"
+        else:
+            status["message"] = "Google Calendar API is ready! Try creating a booking to test it."
+        
+        return jsonify(status), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 # RUN LOCALLY PORT 5000
 #app entry point
