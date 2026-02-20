@@ -140,17 +140,19 @@ const BookingForm = ({ tutor, learnerId, onClose, onSuccess }) => {
 
       // If successful, show success message
       let successMessage = "Booking created successfully!";
-      
-      // Add API status to message
+
+      // Add API status to message only on success
       if (response.data.api_integrations) {
         const calendar = response.data.api_integrations.google_calendar;
         if (calendar && calendar.success) {
           successMessage += " Calendar event created!";
-        } else if (calendar && !calendar.success) {
-          successMessage += ` (Calendar: ${calendar.message})`;
+        }
+        const email = response.data.api_integrations.email;
+        if (email && email.success) {
+          successMessage += " Confirmation email sent!";
         }
       }
-      
+
       setStatus({ type: "success", message: successMessage });
       
       // Iteration 4 - Show toast notification
@@ -394,41 +396,38 @@ const BookingForm = ({ tutor, learnerId, onClose, onSuccess }) => {
                 </div>
               )}
 
-              {/* Iteration 4 - Show API integration results */}
+              {/* Iteration 4 - Show API integration results (only show successful integrations or friendly failure messages) */}
               {apiResults && (
                 <div className="mt-3">
-                  <h6 className="text-muted mb-2">API Integration Status:</h6>
                   <div className="small">
-                    {/* Iteration 4 - Google Calendar integration status with event link */}
-                    {apiResults.google_calendar && (
-                      <div className={`mb-2 p-3 rounded ${apiResults.google_calendar.success ? 'bg-success bg-opacity-10 text-success' : 'bg-warning bg-opacity-10 text-warning'}`}>
-                        <strong>Google Calendar:</strong> {apiResults.google_calendar.success ? (
-                          <span>
-                            Event created
-                            {apiResults.google_calendar.event_link && (
-                              <a 
-                                href={apiResults.google_calendar.event_link} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="ms-2 btn btn-sm btn-outline-success"
-                                style={{ textDecoration: 'none' }}
-                              >
-                                <i className="bi bi-calendar-event me-1"></i>
-                                View in Calendar
-                              </a>
-                            )}
-                          </span>
-                        ) : (
-                          apiResults.google_calendar.message
-                        )}
+                    {/* Google Calendar - show link on success, friendly message on failure */}
+                    {apiResults.google_calendar && apiResults.google_calendar.success && (
+                      <div className="mb-2 p-3 rounded bg-success bg-opacity-10 text-success">
+                        <strong><i className="bi bi-calendar-check me-1"></i>Google Calendar:</strong>{' '}
+                        <span>
+                          Event created
+                          {apiResults.google_calendar.event_link && (
+                            <a
+                              href={apiResults.google_calendar.event_link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="ms-2 btn btn-sm btn-outline-success"
+                              style={{ textDecoration: 'none' }}
+                            >
+                              <i className="bi bi-calendar-event me-1"></i>
+                              View in Calendar
+                            </a>
+                          )}
+                        </span>
                       </div>
                     )}
-                    {apiResults.email && (
-                      <div className={`mb-2 p-2 rounded ${apiResults.email.success ? 'bg-success bg-opacity-10 text-success' : 'bg-warning bg-opacity-10 text-warning'}`}>
-                        <strong>Email:</strong> {apiResults.email.success ? 'Emails sent' : apiResults.email.message}
+                    {/* Email - show success only */}
+                    {apiResults.email && apiResults.email.success && (
+                      <div className="mb-2 p-2 rounded bg-success bg-opacity-10 text-success">
+                        <strong><i className="bi bi-envelope-check me-1"></i>Email:</strong> Confirmation emails sent
                       </div>
                     )}
-                    {/* Iteration 4 - Only show timezone if successful, hide errors to avoid confusion */}
+                    {/* Timezone - show on success only */}
                     {apiResults.timezone && apiResults.timezone.success && (
                       <div className="mb-2 p-2 rounded bg-info bg-opacity-10 text-info">
                         <strong>Timezone:</strong> {apiResults.timezone.timezone}

@@ -1,6 +1,10 @@
 // Iteration 4 - Tutor Earnings Component
 // Shows tutor earnings info
 // ref: Axios HTTP requests - https://axios-http.com/docs/intro
+//
+// Pagination
+// Reference: Bootstrap 5.3 Documentation (2025) "Pagination" — https://getbootstrap.com/docs/5.3/components/pagination/
+// Used to split the earnings breakdown table across multiple pages (10 items per page).
 
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
@@ -10,6 +14,8 @@ const TutorEarnings = ({ tutorId }) => {
   const [earnings, setEarnings] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
 
   // Iteration 4 - Fetch earnings data
   const fetchEarnings = useCallback(async () => {
@@ -32,10 +38,13 @@ const TutorEarnings = ({ tutorId }) => {
     }
   }, [tutorId]);
 
-  // Fetch earnings on component mount
   useEffect(() => {
     fetchEarnings();
   }, [fetchEarnings]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [earnings]);
 
   if (loading && !earnings) {
     return (
@@ -157,7 +166,7 @@ const TutorEarnings = ({ tutorId }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {earnings.earnings_breakdown.map((session) => (
+                  {earnings.earnings_breakdown.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((session) => (
                     <tr key={session.booking_id}>
                       <td>
                         {new Date(session.session_date).toLocaleDateString("en-US", {
@@ -194,6 +203,23 @@ const TutorEarnings = ({ tutorId }) => {
                 </tfoot>
               </table>
             </div>
+          )}
+          {Math.ceil(earnings.earnings_breakdown.length / ITEMS_PER_PAGE) > 1 && (
+            <nav className="mt-3 d-flex justify-content-center">
+              <ul className="pagination">
+                <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
+                  <button className="page-link" onClick={() => setCurrentPage(p => p - 1)}>Previous</button>
+                </li>
+                {Array.from({ length: Math.ceil(earnings.earnings_breakdown.length / ITEMS_PER_PAGE) }, (_, i) => (
+                  <li key={i + 1} className={`page-item ${currentPage === i + 1 ? 'active' : ''}`}>
+                    <button className="page-link" onClick={() => setCurrentPage(i + 1)}>{i + 1}</button>
+                  </li>
+                ))}
+                <li className={`page-item ${currentPage === Math.ceil(earnings.earnings_breakdown.length / ITEMS_PER_PAGE) ? 'disabled' : ''}`}>
+                  <button className="page-link" onClick={() => setCurrentPage(p => p + 1)}>Next</button>
+                </li>
+              </ul>
+            </nav>
           )}
         </div>
 

@@ -16,10 +16,13 @@ import axios from "axios";
 
 const Register = ({ onRegisterSuccess }) => {
   const [formData, setFormData] = useState({
+    first_name: "",
+    last_name: "",
     email: "",
     password: "",
     confirmPassword: "",
     role: "learner",
+    modules: "",
   });
   
   const [message, setMessage] = useState({ type: "", text: "" });
@@ -40,6 +43,12 @@ const Register = ({ onRegisterSuccess }) => {
       return;
     }
 
+    // Iteration 5 - Require first and last name for learners
+    if (formData.role === 'learner' && (!formData.first_name.trim() || !formData.last_name.trim())) {
+      setMessage({ type: "error", text: "Please enter your first and last name." });
+      return;
+    }
+
     if (formData.password !== formData.confirmPassword) {
       setMessage({ type: "error", text: "Passwords do not match." });
       return;
@@ -50,13 +59,28 @@ const Register = ({ onRegisterSuccess }) => {
       return;
     }
 
+    // Iteration 5 - Validate module format (2 letters + 4 digits, e.g. IS5543)
+    if (formData.role === 'learner' && formData.modules.trim()) {
+      const modulePattern = /^[A-Za-z]{2}\d{4}$/;
+      const modulesList = formData.modules.split(',').map(m => m.trim()).filter(m => m.length > 0);
+      const invalid = modulesList.filter(m => !modulePattern.test(m));
+      if (invalid.length > 0) {
+        setMessage({ type: "error", text: `Invalid module code(s): ${invalid.join(', ')}. Format must be 2 letters followed by 4 numbers (e.g. IS5543).` });
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
       // Send registration data to backend
+      // Iteration 5 - Send modules when registering as a learner
       const response = await axios.post("http://127.0.0.1:5000/api/auth/register", {
         email: formData.email,
         password: formData.password,
         role: formData.role,
+        first_name: formData.role === 'learner' ? formData.first_name.trim() : undefined,
+        last_name: formData.role === 'learner' ? formData.last_name.trim() : undefined,
+        modules: formData.role === 'learner' ? formData.modules : undefined,
       });
 
       // If successful, call the onRegisterSuccess callback with user data
@@ -75,10 +99,13 @@ const Register = ({ onRegisterSuccess }) => {
       
       // Clear form after successful registration
       setFormData({
+        first_name: "",
+        last_name: "",
         email: "",
         password: "",
         confirmPassword: "",
         role: "learner",
+        modules: "",
       });
     } catch (error) {
       const errorMessage =
@@ -124,6 +151,42 @@ const Register = ({ onRegisterSuccess }) => {
           <div className="card shadow-sm">
             <div className="card-body p-4">
               <form onSubmit={handleSubmit}>
+                {/* Iteration 5 - Name fields shown for learners */}
+                {formData.role === 'learner' && (
+                  <div className="row g-3 mb-3">
+                    <div className="col-md-6">
+                      <label className="form-label fw-semibold" htmlFor="first_name">
+                        First Name *
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        id="first_name"
+                        name="first_name"
+                        placeholder="Enter your first name"
+                        value={formData.first_name}
+                        onChange={handleChange}
+                        required
+                      />
+                    </div>
+                    <div className="col-md-6">
+                      <label className="form-label fw-semibold" htmlFor="last_name">
+                        Last Name *
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        id="last_name"
+                        name="last_name"
+                        placeholder="Enter your last name"
+                        value={formData.last_name}
+                        onChange={handleChange}
+                        required
+                      />
+                    </div>
+                  </div>
+                )}
+
                 {/* Email input field */}
                 <div className="mb-3">
                   <label className="form-label fw-semibold" htmlFor="email">
@@ -197,6 +260,27 @@ const Register = ({ onRegisterSuccess }) => {
                   </select>
                   <small className="text-muted">Select your account type</small>
                 </div>
+
+                {/* Iteration 5 - Modules input shown only for learners */}
+                {formData.role === 'learner' && (
+                  <div className="mb-3">
+                    <label className="form-label fw-semibold" htmlFor="modules">
+                      Modules You're Studying
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      id="modules"
+                      name="modules"
+                      placeholder="e.g. IS5543, AC4401, MA4402 (comma-separated)"
+                      value={formData.modules}
+                      onChange={handleChange}
+                    />
+                    <small className="text-muted">
+                      Optional — you can add or change these later. Format: 2 letters + 4 numbers (e.g. IS5543). Separate with commas.
+                    </small>
+                  </div>
+                )}
 
                 {/* Show success/error message if there is one */}
                 {message.text && (

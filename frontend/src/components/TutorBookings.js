@@ -1,5 +1,9 @@
 // This component displays all bookings for a specific tutor
 // It shows a table with all the tutoring sessions the tutor has scheduled
+//
+// Pagination
+// Reference: Bootstrap 5.3 Documentation (2025) "Pagination" — https://getbootstrap.com/docs/5.3/components/pagination/
+// Used to split the bookings table across multiple pages (10 items per page).
 
 // Import React and the hooks needed
 import React, { useEffect, useState, useCallback, useMemo } from "react";
@@ -31,6 +35,10 @@ const TutorBookings = ({ tutorId }) => {
   
   // Iteration 4 - State for showing messages
   const [showMessagesForBooking, setShowMessagesForBooking] = useState(null);
+
+  // Iteration 5 - Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
 
   // FUNCTIONS
 
@@ -280,6 +288,7 @@ const TutorBookings = ({ tutorId }) => {
           </div>
         ) : (
           /* Show table of bookings if there are any */
+          <>
           <div className="table-responsive">
             <table className="table table-hover mb-0">
               <thead>
@@ -296,7 +305,8 @@ const TutorBookings = ({ tutorId }) => {
               </thead>
               <tbody>
                 {/* Loop through each booking and create a table row */}
-                {bookings.map((booking) => (
+                {/* Iteration 5 - Paginated slice */}
+                {bookings.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((booking) => (
                   <React.Fragment key={booking.booking_id}>
                   <tr>
                     {/* Format the date nicely (e.g., "Mon, Jan 15, 2024") */}
@@ -405,6 +415,26 @@ const TutorBookings = ({ tutorId }) => {
               </tbody>
             </table>
           </div>
+
+          {/* Iteration 5 - Pagination controls */}
+          {Math.ceil(bookings.length / ITEMS_PER_PAGE) > 1 && (
+            <nav className="mt-3 d-flex justify-content-center">
+              <ul className="pagination">
+                <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
+                  <button className="page-link" onClick={() => setCurrentPage(p => p - 1)}>Previous</button>
+                </li>
+                {Array.from({ length: Math.ceil(bookings.length / ITEMS_PER_PAGE) }, (_, i) => (
+                  <li key={i + 1} className={`page-item ${currentPage === i + 1 ? 'active' : ''}`}>
+                    <button className="page-link" onClick={() => setCurrentPage(i + 1)}>{i + 1}</button>
+                  </li>
+                ))}
+                <li className={`page-item ${currentPage === Math.ceil(bookings.length / ITEMS_PER_PAGE) ? 'disabled' : ''}`}>
+                  <button className="page-link" onClick={() => setCurrentPage(p => p + 1)}>Next</button>
+                </li>
+              </ul>
+            </nav>
+          )}
+          </>
         )}
       </div>
     </div>

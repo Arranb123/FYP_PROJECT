@@ -77,6 +77,15 @@ const TutorSignup = () => {
         setMessage("Please fill in all required fields (First Name, Last Name, Email, Modules, Hourly Rate).");
         return;
       }
+
+      // Iteration 5 - Validate module code format (2 letters + 4 digits, e.g. IS5543)
+      const modulePattern = /^[A-Za-z]{2}\d{4}$/;
+      const moduleList = formData.modules.split(',').map(m => m.trim()).filter(m => m.length > 0);
+      const invalidModules = moduleList.filter(m => !modulePattern.test(m));
+      if (invalidModules.length > 0) {
+        setMessage(`Invalid module code(s): ${invalidModules.join(', ')}. Format must be 2 letters followed by 4 numbers (e.g. IS5543).`);
+        return;
+      }
       
       // Story 15 - Convert file to base64 for database storage
       let proofDocBase64 = '';
@@ -299,12 +308,12 @@ const TutorSignup = () => {
                       type="text"
                       className="form-control"
                       name="modules"
-                      placeholder="e.g. Mathematics, Physics, Chemistry (comma-separated)"
+                      placeholder="e.g. IS5543, AC4401, MA4402 (comma-separated)"
                       value={formData.modules}
                       onChange={handleChange}
                       required
                     />
-                    <small className="text-muted">Separate multiple modules with commas</small>
+                    <small className="text-muted">Format: 2 letters + 4 numbers (e.g. IS5543). Separate with commas.</small>
                   </div>
 
                   {/* Iteration 2 - Enhanced hourly rate input with euro symbol */}

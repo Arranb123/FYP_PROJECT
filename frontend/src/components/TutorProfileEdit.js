@@ -11,7 +11,7 @@
 //file reference https://getbootstrap.com/docs/5.3/
 
 // Story 10 - tutor profile edit
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 
 const TutorProfileEdit = ({ tutorId }) => {
@@ -30,14 +30,14 @@ const TutorProfileEdit = ({ tutorId }) => {
   const [tutorInfo, setTutorInfo] = useState(null);
 
   // Story 10 - get tutor info
-  const fetchTutorInfo = async () => {
+  const fetchTutorInfo = useCallback(async () => {
     if (!tutorId) return;
-    
+
     setLoading(true);
     try {
       const res = await axios.get(`http://127.0.0.1:5000/api/tutors/${tutorId}`);
       const tutor = res.data;
-      
+
       if (tutor) {
         setTutorInfo(tutor);
         setFormData({
@@ -55,7 +55,7 @@ const TutorProfileEdit = ({ tutorId }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [tutorId]);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -69,6 +69,15 @@ const TutorProfileEdit = ({ tutorId }) => {
 
     if (!formData.modules || !formData.hourly_rate) {
       setMessage({ type: "error", text: "Please fill in all required fields." });
+      return;
+    }
+
+    // Iteration 5 - Validate module code format (2 letters + 4 digits, e.g. IS5543)
+    const modulePattern = /^[A-Za-z]{2}\d{4}$/;
+    const moduleList = formData.modules.split(',').map(m => m.trim()).filter(m => m.length > 0);
+    const invalidModules = moduleList.filter(m => !modulePattern.test(m));
+    if (invalidModules.length > 0) {
+      setMessage({ type: "error", text: `Invalid module code(s): ${invalidModules.join(', ')}. Format must be 2 letters followed by 4 numbers (e.g. IS5543).` });
       return;
     }
 
@@ -103,7 +112,7 @@ const TutorProfileEdit = ({ tutorId }) => {
   // Story 10 - load tutor info on mount
   useEffect(() => {
     fetchTutorInfo();
-  }, [tutorId]);
+  }, [fetchTutorInfo]);
 
   return (
     <div className="container">
@@ -173,12 +182,12 @@ const TutorProfileEdit = ({ tutorId }) => {
                     className="form-control"
                     id="modules"
                     name="modules"
-                    placeholder="e.g. Mathematics, Physics, Chemistry (comma-separated)"
+                    placeholder="e.g. IS5543, AC4401, MA4402 (comma-separated)"
                     value={formData.modules}
                     onChange={handleChange}
                     required
                   />
-                  <small className="text-muted">Separate multiple modules with commas</small>
+                  <small className="text-muted">Format: 2 letters + 4 numbers (e.g. IS5543). Separate with commas.</small>
                 </div>
 
                 <div className="mb-3">

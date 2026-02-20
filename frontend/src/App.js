@@ -4,6 +4,10 @@
 // React Docs (2025) "useState, useEffect, useMemo" — https://react.dev/reference/react
 // Used for component state and running code on initial render.
 import React, { useEffect, useState, useMemo } from "react";
+// Iteration 5 - Theme Provider for dark mode support
+// Reference: Material UI Documentation (2025) "Theming" — https://mui.com/material-ui/customization/theming/
+// Used to provide theme context and dark mode functionality across the entire application.
+import { ThemeProvider } from "./components/ThemeProvider";
 
 // Local components (rendered conditionally via navigation)
 import TutorSearch from "./components/TutorSearch"; //  Tutor Search component
@@ -24,6 +28,17 @@ import ToastContainer from "./components/ToastContainer"; // Toast notification 
 import MessagesView from "./components/MessagesView"; // Messages view component
 import LearnerSpending from "./components/LearnerSpending"; // UX Improvement - Learner spending/payment history component
 import TutorEarnings from "./components/TutorEarnings"; // Tutor earnings component
+// Iteration 5 - Dark Mode Toggle component
+// Reference: Material UI Documentation (2025) "Switch" — https://mui.com/material-ui/react-switch/
+// Used to provide a toggle switch for switching between light and dark themes.
+import DarkModeToggle from "./components/DarkModeToggle";
+// Iteration 5 - How to Use guide pages for learners and tutors
+import LearnerGuide from "./components/LearnerGuide";
+import TutorGuide from "./components/TutorGuide";
+// Iteration 5 - Learner profile editing (modules, name)
+import LearnerProfileEdit from "./components/LearnerProfileEdit";
+// Import CoreUI CSS first (before custom CSS)
+import '@coreui/coreui/dist/css/coreui.min.css';
 // Import the custom CSS file for styling
 import "./App.css";
 
@@ -49,6 +64,8 @@ function App() {
   // Iteration 3 - check for stored user on mount
   const [initialUserCheck, setInitialUserCheck] = useState(false);
   const [currentPage, setCurrentPage] = useState(null);
+  // Iteration 5 - track page before opening a guide so we can return to it
+  const [previousPage, setPreviousPage] = useState(null);
 
   // Iteration 3 - auth state
   const [currentUser, setCurrentUser] = useState(null);
@@ -112,8 +129,8 @@ function App() {
       }
       basePages.push('tutor-bookings', 'tutor-calendar', 'tutor-availability', 'tutor-profile-edit', 'messages', 'tutor-earnings');
     } else if (role === 'learner') {
-      // UX Improvement - Learner sees: Tutor Search, My Bookings, Calendar, Messages, Payment History
-      basePages.push('tutors', 'learner-bookings', 'learner-calendar', 'messages', 'payment-history');
+      // UX Improvement - Learner sees: Tutor Search, My Bookings, Calendar, Messages, Payment History, Edit Profile
+      basePages.push('tutors', 'learner-bookings', 'learner-calendar', 'messages', 'payment-history', 'learner-profile-edit');
     }
     
     return basePages;
@@ -139,10 +156,12 @@ function App() {
 
   // Iteration 3 - Handle logout
   // Iteration 4 - Modified to return to landing page
+  // Iteration 5 - Clear persisted page on logout (ChatGPT — https://chatgpt.com/share/6998ce9c-0db0-8008-9560-18ad8cb86d32)
   // file reference: https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage (lines 131-137)
   const handleLogout = () => {
     setCurrentUser(null);
     localStorage.removeItem('currentUser');
+    localStorage.removeItem('currentPage');
     setCurrentPage(null);
     setAuthPage(null); // Iteration 4 - Return to landing page
   };
@@ -153,14 +172,35 @@ function App() {
   // Iteration 4 - Modified to show landing page instead of login
   // file reference: https://react.dev/reference/react/useEffect (lines 141-150)
   // file reference: https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage (lines 141-150)
+  // Iteration 5 - Restore user session and last page from localStorage on refresh
+  // file reference: https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage
+  // ChatGPT conversation on persisting user and page state — https://chatgpt.com/share/6998ce9c-0db0-8008-9560-18ad8cb86d32
   useEffect(() => {
-    // Don't auto-restore user session - always start at landing page
-    // User must log in fresh on each page reload
-    setCurrentUser(null);
-    setCurrentPage(null); // Always show landing page
-    setAuthPage(null); // Iteration 4 - null means show landing page
+    const savedUser = localStorage.getItem('currentUser');
+    if (savedUser) {
+      try {
+        const userData = JSON.parse(savedUser);
+        setCurrentUser(userData);
+        const savedPage = localStorage.getItem('currentPage');
+        if (savedPage) {
+          setCurrentPage(savedPage);
+        }
+      } catch (e) {
+        // If stored data is corrupted, clear it and show landing page
+        localStorage.removeItem('currentUser');
+        localStorage.removeItem('currentPage');
+      }
+    }
     setInitialUserCheck(true);
   }, []);
+
+  // Iteration 5 - Save current page to localStorage so it survives a refresh
+  // ChatGPT — https://chatgpt.com/share/6998ce9c-0db0-8008-9560-18ad8cb86d32
+  useEffect(() => {
+    if (currentUser && currentPage) {
+      localStorage.setItem('currentPage', currentPage);
+    }
+  }, [currentPage, currentUser]);
 
   // loads all students once the page loads , only occurs once
   useEffect(() => {
@@ -172,12 +212,15 @@ function App() {
   // Iteration 3 - Removed tutor fetching for dropdowns since tutors now see only their own data
   
   // Iteration 3 - If current page is not available for user role, redirect to first available page
+  // Iteration 5 - guide pages are excluded from this check so they are not immediately reset
+  const GUIDE_PAGES = ['learner-guide', 'tutor-guide'];
   useEffect(() => {
-    if (currentUser && currentPage && !availablePages.includes(currentPage)) {
+    if (currentUser && currentPage && !availablePages.includes(currentPage) && !GUIDE_PAGES.includes(currentPage)) {
       if (availablePages.length > 0) {
         setCurrentPage(availablePages[0]);
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, currentPage, availablePages]);
 
   const fetchStudents = async () => {  // function sends a get request to flask to get all stidents and show in frontend table
@@ -337,161 +380,193 @@ function App() {
       );
     }
     
-    // Show login or register form
+    // Iteration 5 - Login page uses MUI design with its own full-screen layout
+    if (authPage === 'login') {
+      return (
+        <Login
+          onLoginSuccess={handleLoginSuccess}
+          onBack={() => setAuthPage(null)}
+          onNavigateToRegister={() => setAuthPage('register')}
+        />
+      );
+    }
+
+    // Show register form
     return (
       <div className="container-fluid py-4" style={{ minHeight: "100vh", backgroundColor: "#f8f9fa" }}>
         <div className="container">
-          {/* Iteration 4 - Back to landing page button */}
+          {/* Back to landing page button */}
           <div className="mb-3">
-            <button 
-              className="btn btn-link text-muted p-0" 
+            <button
+              className="btn btn-link text-muted p-0"
               onClick={() => setAuthPage(null)}
               style={{ textDecoration: 'none' }}
             >
               ← Back to Home
             </button>
           </div>
-          
-          {authPage === 'register' ? (
-            <Register onRegisterSuccess={handleRegisterSuccess} />
-          ) : (
-            <Login onLoginSuccess={handleLoginSuccess} />
-          )}
-          {/* Toggle between login and register */}
+
+          <Register onRegisterSuccess={handleRegisterSuccess} />
+
+          {/* Toggle to login */}
           <div className="text-center mt-3">
-            {authPage === 'register' ? (
-              <p className="text-muted">
-                Already have an account?{' '}
-                <button 
-                  className="btn btn-link p-0" 
-                  onClick={() => setAuthPage('login')}
-                  style={{ textDecoration: 'underline' }}
-                >
-                  Login here
-                </button>
-              </p>
-            ) : (
-              <p className="text-muted">
-                Don't have an account?{' '}
-                <button 
-                  className="btn btn-link p-0" 
-                  onClick={() => setAuthPage('register')}
-                  style={{ textDecoration: 'underline' }}
-                >
-                  Register here
-                </button>
-              </p>
-            )}
+            <p className="text-muted">
+              Already have an account?{' '}
+              <button
+                className="btn btn-link p-0"
+                onClick={() => setAuthPage('login')}
+                style={{ textDecoration: 'underline' }}
+              >
+                Login here
+              </button>
+            </p>
           </div>
         </div>
       </div>
     );
   }
 
+  // Don't show regular nav for admin dashboard (CoreUI has its own)
+  if (currentPage === "admin" && currentUser?.role === 'admin') {
+    return (
+      <>
+        <ToastContainer />
+        <AdminDashboard onLogout={handleLogout} currentUser={currentUser} />
+      </>
+    );
+  }
+
   return (
     // Iteration 2 - Enhanced container with Bootstrap styling
     // Iteration 5 - Added gradient background for logged-in users
-    <div className="container-fluid py-4 app-gradient-background">
+    <div className="container-fluid py-4 app-gradient-background d-flex flex-column" style={{ minHeight: "100vh" }}>
       {/* Iteration 4 - Toast notifications container */}
       <ToastContainer />
       {/* Professional Navigation Bar */}
       <nav className="navbar navbar-expand-lg mb-4">
-        <div className="container-fluid">
-          {/* Brand */}
-          <div 
-            className="navbar-brand d-flex align-items-center"
-            style={{ 
-              cursor: 'pointer',
-              padding: '0.5rem 1rem',
-              borderRadius: '0.75rem',
-              transition: 'all 0.2s ease'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'var(--gray-50)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }}
-            onClick={() => {
-              if (availablePages.length > 0) {
-                setCurrentPage(availablePages[0]);
-              }
-            }}
-          >
-            <img 
-              src="/logo.png" 
-              alt="StudyHive Logo" 
-              className="logo-navbar me-2"
-              style={{ height: "42px" }}
-              onError={(e) => {
-                e.target.style.display = 'none';
+        <div className="container-fluid d-flex justify-content-between align-items-center">
+          {/* Brand + How to Use button stacked above logo */}
+          <div className="d-flex flex-column align-items-start">
+            {/* Iteration 5 - How to Use button above logo */}
+            {currentUser && (currentUser.role === 'learner' || currentUser.role === 'tutor') && (
+              <button
+                className="btn btn-link p-0 mb-1"
+                style={{
+                  fontSize: '0.72rem',
+                  color: 'var(--primary)',
+                  textDecoration: 'none',
+                  letterSpacing: '0.01em',
+                  lineHeight: 1.2,
+                }}
+                onClick={() => {
+                  setPreviousPage(currentPage);
+                  setCurrentPage(currentUser.role === 'learner' ? 'learner-guide' : 'tutor-guide');
+                }}
+              >
+                <i className="bi bi-question-circle me-1"></i>
+                How to Use StudyHive
+              </button>
+            )}
+            <div
+              className="navbar-brand d-flex align-items-center mb-0"
+              style={{
+                cursor: 'pointer',
+                padding: '0.5rem 1rem',
+                borderRadius: '0.75rem',
+                transition: 'all 0.2s ease'
               }}
-            />
-            <span className="d-none d-md-inline fw-bold" style={{ fontSize: "1.5rem", color: "var(--primary)" }}>
-              StudyHive
-          </span>
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'var(--gray-50)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+              onClick={() => {
+                if (availablePages.length > 0) {
+                  setCurrentPage(availablePages[0]);
+                }
+              }}
+            >
+              <img
+                src="/logo.png"
+                alt="StudyHive Logo"
+                className="logo-navbar me-2"
+                style={{ height: "42px" }}
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                }}
+              />
+              <span className="d-none d-md-inline fw-bold" style={{ fontSize: "1.5rem", color: "var(--primary)" }}>
+                StudyHive
+              </span>
+            </div>
           </div>
           
-          {/* Navigation */}
-          <div className="d-flex align-items-center flex-wrap gap-2">
-            <div className="navbar-nav flex-row align-items-center me-3">
-              {availablePages.map((page) => {
-                const pageLabels = {
-                  "tutors": { label: "Tutor Search", icon: "bi-search" },
-                  "admin": { label: "Admin Dashboard", icon: "bi-speedometer2" },
-                  "learner-bookings": { label: "My Bookings", icon: "bi-calendar-check" },
-                  "tutor-bookings": { label: "My Bookings", icon: "bi-calendar-check" },
-                  "learner-calendar": { label: "Calendar", icon: "bi-calendar3" },
-                  "tutor-calendar": { label: "Calendar", icon: "bi-calendar3" },
-                  "tutor-availability": { label: "Availability", icon: "bi-clock" },
-                  "tutor-profile-edit": { label: "Edit Profile", icon: "bi-person-gear" },
-                  "messages": { label: "Messages", icon: "bi-chat-dots" },
-                  "payment-history": { label: "Payment History", icon: "bi-receipt" },
-                  "tutor-earnings": { label: "Earnings", icon: "bi-cash-coin" }
-                };
-                const pageInfo = pageLabels[page] || { label: page, icon: "bi-circle" };
-                
-                return (
+          {/* Navigation - Centered */}
+          <div className="navbar-nav flex-row align-items-center" style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>
+            {availablePages.map((page) => {
+              const pageLabels = {
+                "tutors": { label: "Tutor Search", icon: "bi-search" },
+                "admin": { label: "Admin Dashboard", icon: "bi-speedometer2" },
+                "learner-bookings": { label: "My Bookings", icon: "bi-calendar-check" },
+                "tutor-bookings": { label: "My Bookings", icon: "bi-calendar-check" },
+                "learner-calendar": { label: "Calendar", icon: "bi-calendar3" },
+                "tutor-calendar": { label: "Calendar", icon: "bi-calendar3" },
+                "tutor-availability": { label: "Availability", icon: "bi-clock" },
+                "tutor-profile-edit": { label: "Edit Profile", icon: "bi-person-gear" },
+                "messages": { label: "Messages", icon: "bi-chat-dots" },
+                "payment-history": { label: "Payment History", icon: "bi-receipt" },
+                "tutor-earnings": { label: "Earnings", icon: "bi-cash-coin" },
+                "learner-profile-edit": { label: "Edit Profile", icon: "bi-person-gear" }
+              };
+              const pageInfo = pageLabels[page] || { label: page, icon: "bi-circle" };
+              
+              return (
+          <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={`btn btn-nav ${currentPage === page ? "btn-nav-active" : ""}`}
+                >
+                  <i className={`bi ${pageInfo.icon} me-2`}></i>
+                  <span className="d-none d-lg-inline">{pageInfo.label}</span>
+                  <span className="d-lg-none">{pageInfo.label.split(' ')[0]}</span>
+          </button>
+              );
+            })}
+          </div>
+          
+          {/* User Info */}
+          <div className="d-flex align-items-center border-start ps-3" style={{ borderColor: "var(--gray-200)" }}>
+            {/* Iteration 5 - Dark Mode Toggle */}
+            <div className="me-3">
+              <DarkModeToggle />
+            </div>
+            <div className="d-flex flex-column align-items-end me-3 d-none d-md-flex">
+              <small className="text-muted" style={{ fontSize: "0.75rem", fontWeight: "500" }}>
+                {currentUser.email.split('@')[0]}
+              </small>
+              <span className={`badge mt-1 ${
+                currentUser.role === 'admin' ? 'bg-danger' :
+                currentUser.role === 'tutor' ? 'bg-primary' :
+                'bg-info'
+              }`} style={{ fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                {currentUser.role}
+              </span>
+            </div>
             <button
-                    key={page}
-                    onClick={() => setCurrentPage(page)}
-                    className={`btn btn-nav ${currentPage === page ? "btn-nav-active" : ""}`}
-                  >
-                    <i className={`bi ${pageInfo.icon} me-2`}></i>
-                    <span className="d-none d-lg-inline">{pageInfo.label}</span>
-                    <span className="d-lg-none">{pageInfo.label.split(' ')[0]}</span>
+              onClick={handleLogout}
+              className="btn btn-outline-danger btn-sm"
+            >
+              <i className="bi bi-box-arrow-right me-1"></i>
+              <span className="d-none d-sm-inline">Logout</span>
             </button>
-                );
-              })}
-            </div>
-            
-            {/* User Info */}
-            <div className="d-flex align-items-center border-start ps-3 ms-3" style={{ borderColor: "var(--gray-200)" }}>
-              <div className="d-flex flex-column align-items-end me-3 d-none d-md-flex">
-                <small className="text-muted" style={{ fontSize: "0.75rem", fontWeight: "500" }}>
-                  {currentUser.email.split('@')[0]}
-                </small>
-                <span className={`badge mt-1 ${
-                  currentUser.role === 'admin' ? 'bg-danger' :
-                  currentUser.role === 'tutor' ? 'bg-primary' :
-                  'bg-info'
-                }`} style={{ fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                  {currentUser.role}
-                </span>
-              </div>
-              <button
-                onClick={handleLogout}
-                className="btn btn-outline-danger btn-sm"
-              >
-                <i className="bi bi-box-arrow-right me-1"></i>
-                <span className="d-none d-sm-inline">Logout</span>
-              </button>
-            </div>
           </div>
         </div>
       </nav>
 
-      {/*  Conditional Rendering - Only show pages user has access to */}
+      {/* Main Content Area - Flex grow to push footer down */}
+      <div className="flex-grow-1">
+        {/*  Conditional Rendering - Only show pages user has access to */}
       {/* Note: Students page removed from role-based navigation - only accessible via direct URL if admin */}
       {currentPage === "students" && currentUser?.role === 'admin' && (
         // Iteration 2 - Enhanced container with Bootstrap styling
@@ -667,7 +742,7 @@ function App() {
             <div className="container">
               <div className="alert alert-warning">
                 <strong>Account Setup Required:</strong> Your learner account is not linked to a student record. 
-                Please log out and register again, or contact an administrator to link your account.
+                Please log out and register again.
               </div>
             </div>
           )}
@@ -680,9 +755,6 @@ function App() {
       {/* file reference: https://react.dev/reference/react (conditional rendering - lines 623-625) */}
       {currentPage === "signup" && <TutorSignup />}
 
-      {/*  Admin Dashboard Page - Only for admins */}
-      {/* file reference: https://react.dev/reference/react (conditional rendering - line 628) */}
-      {currentPage === "admin" && currentUser?.role === 'admin' && <AdminDashboard />}
 
       {/* Iteration 4 - Tutor Availability Management Page - Only for tutors */}
       {currentPage === "tutor-availability" && currentUser?.role === 'tutor' && (
@@ -759,7 +831,10 @@ function App() {
           </div>
           {/* Iteration 3 - Show LearnerBookings component using logged-in learner's ID */}
           {currentUser?.student_id ? (
-            <LearnerBookings learnerId={currentUser.student_id} />
+            <LearnerBookings 
+              learnerId={currentUser.student_id} 
+              onNavigateToTutors={() => setCurrentPage('tutors')}
+            />
           ) : (
             <div className="alert alert-warning">
               <strong>Note:</strong> Your account is not linked to a student record. Please contact an administrator.
@@ -808,6 +883,19 @@ function App() {
           ) : (
             <div className="alert alert-warning">
               <strong>Note:</strong> Your account is not linked to a student record. Please contact an administrator.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Iteration 5 - Learner Profile Edit page */}
+      {currentPage === "learner-profile-edit" && currentUser?.role === 'learner' && (
+        <div className="container">
+          {currentUser?.student_id ? (
+            <LearnerProfileEdit learnerId={currentUser.student_id} />
+          ) : (
+            <div className="alert alert-warning">
+              <strong>Account Setup Required:</strong> Your learner account is not linked to a student record. Please contact an administrator.
             </div>
           )}
         </div>
@@ -902,6 +990,14 @@ function App() {
         </div>
       )}
 
+      {/* Iteration 5 - How to Use guide pages */}
+      {currentPage === 'learner-guide' && currentUser?.role === 'learner' && (
+        <LearnerGuide onReturn={() => setCurrentPage(previousPage || availablePages[0])} />
+      )}
+      {currentPage === 'tutor-guide' && currentUser?.role === 'tutor' && (
+        <TutorGuide onReturn={() => setCurrentPage(previousPage || availablePages[0])} />
+      )}
+
       {/* Iteration 2 - Tutor Bookings page - Only for tutors */}
       {/* Iteration 3 - Removed dropdown, automatically uses logged-in tutor's ID */}
       {/* file reference: https://react.dev/reference/react (conditional rendering - lines 696-720) */}
@@ -956,9 +1052,10 @@ function App() {
           )}
         </div>
       )}
+      </div>
 
       {/* Iteration 2 - Footer with logo */}
-      <footer className="mt-5 py-4 bg-white border-top">
+      <footer className="mt-auto py-4 bg-white border-top">
         <div className="container">
           <div className="row align-items-center">
             <div className="col-12 text-center">
@@ -994,4 +1091,16 @@ function App() {
 /////////////////
 
 
-export default App;
+// Iteration 5 - Wrap App with ThemeProvider for dark mode support
+// Reference: Material UI Documentation (2025) "ThemeProvider" — https://mui.com/material-ui/customization/theming/#theme-provider
+// Used to provide theme context to all child components.
+// Provider-in-App.js approach from ChatGPT — https://chatgpt.com/share/6990e11b-33cc-8008-ad1d-9435b9df7a9f
+function AppWithTheme() {
+  return (
+    <ThemeProvider>
+      <App />
+    </ThemeProvider>
+  );
+}
+
+export default AppWithTheme;

@@ -1,6 +1,13 @@
 // StudyHive Frontend – Iteration 1
 // Admin Dashboard Component
 // Author: Arran Ethan Bearman
+// Iteration 5 - Integrated CoreUI Free React Admin Template
+// used the coreui free react admin template from https://github.com/coreui/coreui-free-react-admin-template
+// components are from the @coreui/react package
+//
+// Pagination
+// Reference: Bootstrap 5.3 Documentation (2025) "Pagination" — https://getbootstrap.com/docs/5.3/components/pagination/
+// Used to split the users table, bookings table, reviews table, and pending tutors table across multiple pages (10 items per page).
 
 // Imports
 // Reference 
@@ -10,6 +17,36 @@
 // Used for making GET / PUT / DELETE requests to the Flask backend.
 import React, { useEffect, useState } from "react";
 import axios from "axios";
+// coreui react components - got these from the github repo
+import {
+  CSidebar,
+  CSidebarBrand,
+  CSidebarNav,
+  CSidebarToggler,
+  CNavItem,
+  CNavLink,
+  CHeader,
+  CHeaderBrand,
+  CHeaderNav,
+  CContainer,
+  CRow,
+  CCol,
+  CCard,
+  CCardHeader,
+  CCardBody,
+  CCardTitle,
+  CBadge,
+  CDropdown,
+  CDropdownToggle,
+  CDropdownMenu,
+  CDropdownItem,
+  CDropdownDivider
+} from '@coreui/react';
+// Iteration 5 - Dark Mode Toggle component
+// Reference: Material UI Documentation (2025) "Switch" — https://mui.com/material-ui/react-switch/
+// Used to provide a toggle switch for switching between light and dark themes in the admin dashboard.
+// CoreUI + MUI dark mode sync (data-coreui-theme, sidebar placement) from ChatGPT — https://chatgpt.com/share/6990e11b-33cc-8008-ad1d-9435b9df7a9f
+import DarkModeToggle from './DarkModeToggle';
 
 /////////////////
 ///////////////
@@ -20,11 +57,13 @@ import axios from "axios";
 // admin dashboard - view unverified tutors, approve/reject them
 //reference ,mdn resource for develpers (2025) https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch used throughout majority of file to assist with 
 //understanding how to make HTTP requests (GET, POST, PUT, DELETE) to the Flask backend, handle JSON responses, and update React state based on returned data.
-function AdminDashboard() {
+function AdminDashboard({ onLogout, currentUser }) {
   //store unverified tutors retrieved from the backend
   const [tutors, setTutors] = useState([]);
     //  endpoint for unverified tutor list
   const API_URL = "http://127.0.0.1:5000/api/tutors/unverified";
+  const [tutorsCurrentPage, setTutorsCurrentPage] = useState(1);
+  const TUTORS_PER_PAGE = 10;
   
 
   // Story 15 - Modal state for viewing proof documents
@@ -34,15 +73,30 @@ function AdminDashboard() {
   // Iteration 4 - Platform report state
   const [report, setReport] = useState(null);
   const [loadingReport, setLoadingReport] = useState(false);
-  const [reportError, setReportError] = useState("");
 
   // UX Improvement - Admin section navigation state
-  const [activeSection, setActiveSection] = useState('pending-tutors'); // Default to pending tutors
+  const [activeSection, setActiveSection] = useState('dashboard'); // Default to dashboard
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  
+  // Settings modal state
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    current_password: '',
+    new_password: '',
+    confirm_password: ''
+  });
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
   
   // Iteration 4 - User management state
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [usersError, setUsersError] = useState("");
+
+  // Iteration 5 - Pagination for users table
+  const [usersCurrentPage, setUsersCurrentPage] = useState(1);
+  const USERS_PER_PAGE = 10;
   
   // UX Improvement - Handle section change and fetch data if needed
   const handleSectionChange = (section) => {
@@ -55,11 +109,16 @@ function AdminDashboard() {
     if (section === 'platform-report' && !report) {
       generateReport();
     }
+    // Fetch tutors when Pending Tutors section is selected
+    if (section === 'pending-tutors') {
+      fetchTutors();
+    }
   };
 
   // Fetch unverified tutors on load
   useEffect(() => {
     fetchTutors();
+    generateReport(); // Load dashboard stats on mount
   }, []);
 
   // Reference :
@@ -80,10 +139,18 @@ function AdminDashboard() {
   const handleApprove = async (id) => { //called when admin presses approve
     try {
       await axios.put(`http://127.0.0.1:5000/api/tutors/${id}/verify`);//sends a request to flask route
-      alert("Tutor approved!");
+      if (window.showToast) {
+        window.showToast("Tutor approved successfully!", "success", 3000);
+      } else {
+        alert("Tutor approved!");
+      }
       fetchTutors();//updates after either action
+      generateReport(); // Refresh stats
     } catch (error) {
       console.error("Error approving tutor:", error);
+      if (window.showToast) {
+        window.showToast("Error approving tutor", "error", 3000);
+      }
     }
   };
 
@@ -92,23 +159,32 @@ function AdminDashboard() {
     if (!window.confirm("Are you sure you want to reject this tutor?")) return; //confirm button
     try {
       await axios.delete(`http://127.0.0.1:5000/api/tutors/${id}`); //sends request to delete and its gone then
-      alert("Tutor rejected and removed!");
+      if (window.showToast) {
+        window.showToast("Tutor rejected and removed!", "success", 3000);
+      } else {
+        alert("Tutor rejected and removed!");
+      }
       fetchTutors();//updates after either action
+      generateReport(); // Refresh stats
     } catch (error) {
       console.error("Error rejecting tutor:", error);
+      if (window.showToast) {
+        window.showToast("Error rejecting tutor", "error", 3000);
+      }
     }
   };
 
   // Iteration 4 - Generate platform report
   const generateReport = async () => {
     setLoadingReport(true);
-    setReportError("");
     try {
       const response = await axios.get("http://127.0.0.1:5000/api/admin/report");
       setReport(response.data);
     } catch (error) {
-      setReportError("Failed to generate report. Please try again.");
       console.error("Error generating report:", error);
+      if (window.showToast) {
+        window.showToast("Failed to generate report. Please try again.", "error", 4000);
+      }
     } finally {
       setLoadingReport(false);
     }
@@ -142,6 +218,68 @@ function AdminDashboard() {
     }
   };
 
+  // Handle password change
+  const handlePasswordChange = async (e) => {
+    e.preventDefault();
+    setPasswordError('');
+    setPasswordSuccess('');
+    
+    // Validation
+    if (!passwordForm.current_password || !passwordForm.new_password || !passwordForm.confirm_password) {
+      setPasswordError('All fields are required');
+      return;
+    }
+    
+    if (passwordForm.new_password.length < 6) {
+      setPasswordError('New password must be at least 6 characters long');
+      return;
+    }
+    
+    if (passwordForm.new_password !== passwordForm.confirm_password) {
+      setPasswordError('New passwords do not match');
+      return;
+    }
+    
+    if (passwordForm.current_password === passwordForm.new_password) {
+      setPasswordError('New password must be different from current password');
+      return;
+    }
+    
+    setChangingPassword(true);
+    try {
+      await axios.put('http://127.0.0.1:5000/api/admin/change-password', {
+        email: currentUser?.email,
+        current_password: passwordForm.current_password,
+        new_password: passwordForm.new_password
+      });
+      
+      setPasswordSuccess('Password changed successfully!');
+      setPasswordForm({
+        current_password: '',
+        new_password: '',
+        confirm_password: ''
+      });
+      
+      if (window.showToast) {
+        window.showToast('Password changed successfully!', 'success', 3000);
+      }
+      
+      // Close modal after 2 seconds
+      setTimeout(() => {
+        setShowSettingsModal(false);
+        setPasswordSuccess('');
+      }, 2000);
+    } catch (error) {
+      const errorMsg = error?.response?.data?.error || 'Failed to change password';
+      setPasswordError(errorMsg);
+      if (window.showToast) {
+        window.showToast(errorMsg, 'error', 4000);
+      }
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
   // Iteration 4 - Update user status (activate/deactivate)
   const updateUserStatus = async (userId, isActive) => {
     try {
@@ -164,268 +302,509 @@ function AdminDashboard() {
     }
   };
 
-// Reference:
+// references:
   // W3Schools (2025) "React JSX" — https://www.w3schools.com
   // Uses React JSX to mix HTML, JS, and CSS dynamically.
-  //  75-125~
   // 
-  //Bootstrap 5.3 - https://getbootstrap.com/docs/5.3/
- //used for: UI styling, responsive layout, modals, buttons, cards, and other components throughout the frontend
+  // Bootstrap 5.3 - https://getbootstrap.com/docs/5.3/
+  // used for: UI styling, responsive layout, modals, buttons, cards, and other components throughout the frontend
+  //
+  // coreui free react admin template - https://github.com/coreui/coreui-free-react-admin-template
+  // used the layout structure and components from this template for the admin dashboard
 
   return (
-    <div className="container py-4">
-      {/* Professional Header */}
-      <div className="page-header mb-5">
-        <div className="d-flex justify-content-between align-items-start">
-          <div>
-            <h1 className="mb-2">Admin Dashboard</h1>
-            <p className="text-muted mb-0">Manage your platform and users</p>
-          </div>
-          {activeSection === 'platform-report' && (
-            <button
-              className="btn btn-outline-primary btn-sm"
-              onClick={generateReport}
-              disabled={loadingReport}
+    <div className="wrapper d-flex flex-column min-vh-100 bg-light">
+      {/* sidebar component from coreui - based on the template structure at https://github.com/coreui/coreui-free-react-admin-template */}
+      <CSidebar 
+        className="border-end" 
+        position="fixed"
+        visible={!sidebarCollapsed}
+        onVisibleChange={(visible) => setSidebarCollapsed(!visible)}
+        narrow={sidebarCollapsed}
+      >
+        <CSidebarBrand className="d-none d-md-flex" style={{ 
+          padding: sidebarCollapsed ? '1rem 0.5rem' : '1.5rem 1rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          transition: 'all 0.3s ease'
+        }}>
+          <img 
+            src="/logo.png" 
+            alt="StudyHive Logo" 
+            style={{ 
+              height: sidebarCollapsed ? "45px" : "70px", 
+              width: "auto",
+              maxWidth: "100%",
+              objectFit: "contain",
+              transition: 'all 0.3s ease'
+            }}
+            onError={(e) => {
+              e.target.style.display = 'none';
+              e.target.nextSibling.style.display = 'block';
+            }}
+          />
+          <span style={{ display: 'none' }}>StudyHive</span>
+        </CSidebarBrand>
+        <CSidebarNav>
+          <CNavItem>
+            <CNavLink 
+              href="#" 
+              active={activeSection === 'dashboard'}
+              onClick={(e) => { e.preventDefault(); handleSectionChange('dashboard'); }}
             >
-              {loadingReport ? (
-                <span className="spinner-border spinner-border-sm"></span>
-              ) : (
+              <i className="bi bi-speedometer2 me-2"></i> {!sidebarCollapsed && <span>Dashboard</span>}
+            </CNavLink>
+          </CNavItem>
+          <CNavItem>
+            <CNavLink 
+              href="#" 
+              active={activeSection === 'pending-tutors'}
+              onClick={(e) => { e.preventDefault(); handleSectionChange('pending-tutors'); }}
+            >
+              <i className="bi bi-person-check me-2"></i> {!sidebarCollapsed && (
                 <>
-                  <i className="bi bi-arrow-clockwise me-2"></i>
-                  Refresh Report
+                  <span>Pending Tutors</span>
+                  {tutors.length > 0 && (
+                    <CBadge color="danger" className="ms-2">{tutors.length}</CBadge>
+                  )}
                 </>
               )}
-            </button>
+            </CNavLink>
+          </CNavItem>
+          <CNavItem>
+            <CNavLink 
+              href="#" 
+              active={activeSection === 'all-bookings'}
+              onClick={(e) => { e.preventDefault(); handleSectionChange('all-bookings'); }}
+            >
+              <i className="bi bi-calendar-check me-2"></i> {!sidebarCollapsed && <span>All Bookings</span>}
+            </CNavLink>
+          </CNavItem>
+          <CNavItem>
+            <CNavLink 
+              href="#" 
+              active={activeSection === 'all-reviews'}
+              onClick={(e) => { e.preventDefault(); handleSectionChange('all-reviews'); }}
+            >
+              <i className="bi bi-star me-2"></i> {!sidebarCollapsed && <span>All Reviews</span>}
+            </CNavLink>
+          </CNavItem>
+          <CNavItem>
+            <CNavLink 
+              href="#" 
+              active={activeSection === 'user-management'}
+              onClick={(e) => { e.preventDefault(); handleSectionChange('user-management'); }}
+            >
+              <i className="bi bi-people me-2"></i> {!sidebarCollapsed && <span>User Management</span>}
+            </CNavLink>
+          </CNavItem>
+          <CNavItem>
+            <CNavLink 
+              href="#" 
+              active={activeSection === 'platform-report'}
+              onClick={(e) => { e.preventDefault(); handleSectionChange('platform-report'); }}
+            >
+              <i className="bi bi-graph-up me-2"></i> {!sidebarCollapsed && <span>Platform Report</span>}
+            </CNavLink>
+          </CNavItem>
+        </CSidebarNav>
+        <CSidebarToggler onClick={() => setSidebarCollapsed(!sidebarCollapsed)} />
+      </CSidebar>
+
+      {/* header component from coreui template - reference the github repo for the original structure */}
+      <CHeader className="mb-0" style={{ marginLeft: sidebarCollapsed ? '64px' : '256px', transition: 'margin-left 0.3s' }}>
+        <button
+          type="button"
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          style={{ 
+            display: 'block', 
+            visibility: 'visible',
+            opacity: 1,
+            cursor: 'pointer',
+            background: 'transparent',
+            border: 'none',
+            padding: '0.5rem 1rem',
+            fontSize: '1.5rem',
+            color: '#6c757d',
+            lineHeight: 1
+          }}
+          className="me-3"
+        >
+          <i className="bi bi-list"></i>
+        </button>
+        <CHeaderBrand className="mx-auto d-md-none" to="/">
+          <img 
+            src="/logo.png" 
+            alt="StudyHive Logo" 
+            style={{ height: "45px", width: "auto" }}
+            onError={(e) => {
+              e.target.style.display = 'none';
+            }}
+          />
+        </CHeaderBrand>
+        <CHeaderNav className="ms-auto">
+            <div className="d-flex align-items-center me-3">
+              <DarkModeToggle />
+            </div>
+            <CDropdown variant="nav-item">
+              <CDropdownToggle caret={false}>
+                <i className="bi bi-person-circle me-2"></i> Admin
+              </CDropdownToggle>
+              <CDropdownMenu>
+                <CDropdownItem href="#">
+                  <i className="bi bi-person me-2"></i>Profile
+                </CDropdownItem>
+                <CDropdownItem 
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setShowSettingsModal(true);
+                    setPasswordError('');
+                    setPasswordSuccess('');
+                    setPasswordForm({
+                      current_password: '',
+                      new_password: '',
+                      confirm_password: ''
+                    });
+                  }}
+                >
+                  <i className="bi bi-gear me-2"></i>Settings
+                </CDropdownItem>
+                <CDropdownDivider />
+                <CDropdownItem 
+                  href="#" 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (onLogout) {
+                      onLogout();
+                    }
+                  }}
+                >
+                  <i className="bi bi-box-arrow-right me-2"></i>Logout
+                </CDropdownItem>
+              </CDropdownMenu>
+            </CDropdown>
+          </CHeaderNav>
+        </CHeader>
+
+      {/* main content container - using coreui layout from the template repo */}
+      <div className="flex-grow-1 px-3" style={{ marginLeft: sidebarCollapsed ? '64px' : '256px', transition: 'margin-left 0.3s', overflow: 'auto' }}>
+          <CContainer fluid className="py-4">
+          {/* dashboard overview - using coreui components from the github template */}
+          {activeSection === 'dashboard' && (
+            <>
+              <h1 className="mb-3">Dashboard</h1>
+              <p className="text-muted mb-4">Platform Overview</p>
+
+              {/* stats widgets - using coreui CRow and CCol components */}
+              <CRow className="g-4 mb-4">
+                <CCol md={3}>
+                  <CCard>
+                    <CCardBody>
+                      <div className="d-flex align-items-center">
+                        <div className="flex-shrink-0">
+                          <i className="bi bi-people fs-1 text-primary"></i>
+                        </div>
+                        <div className="flex-grow-1 ms-3">
+                          <div className="fs-4 fw-bold">{report?.summary?.total_users || 0}</div>
+                          <div className="text-muted small">Total Users</div>
+                        </div>
+                      </div>
+                    </CCardBody>
+                  </CCard>
+                </CCol>
+                <CCol md={3}>
+                  <CCard>
+                    <CCardBody>
+                      <div className="d-flex align-items-center">
+                        <div className="flex-shrink-0">
+                          <i className="bi bi-calendar-check fs-1 text-success"></i>
+                        </div>
+                        <div className="flex-grow-1 ms-3">
+                          <div className="fs-4 fw-bold">{report?.summary?.total_bookings || 0}</div>
+                          <div className="text-muted small">Total Bookings</div>
+                        </div>
+                      </div>
+                    </CCardBody>
+                  </CCard>
+                </CCol>
+                <CCol md={3}>
+                  <CCard>
+                    <CCardBody>
+                      <div className="d-flex align-items-center">
+                        <div className="flex-shrink-0">
+                          <i className="bi bi-person-check fs-1 text-info"></i>
+                        </div>
+                        <div className="flex-grow-1 ms-3">
+                          <div className="fs-4 fw-bold">{report?.summary?.total_verified_tutors || 0}</div>
+                          <div className="text-muted small">Verified Tutors</div>
+                        </div>
+                      </div>
+                    </CCardBody>
+                  </CCard>
+                </CCol>
+                <CCol md={3}>
+                  <CCard>
+                    <CCardBody>
+                      <div className="d-flex align-items-center">
+                        <div className="flex-shrink-0">
+                          <i className="bi bi-exclamation-triangle fs-1 text-warning"></i>
+                        </div>
+                        <div className="flex-grow-1 ms-3">
+                          <div className="fs-4 fw-bold">{tutors.length}</div>
+                          <div className="text-muted small">Pending Tutors</div>
+                        </div>
+                      </div>
+                    </CCardBody>
+                  </CCard>
+                </CCol>
+              </CRow>
+
+              {/* quick actions - using coreui CCard component */}
+              <CRow className="g-4">
+                <CCol md={6}>
+                  <CCard>
+                    <CCardHeader>
+                      <CCardTitle>Quick Actions</CCardTitle>
+                    </CCardHeader>
+                    <CCardBody>
+                      <div className="d-grid gap-2">
+                        <button 
+                          className="btn btn-primary"
+                          onClick={() => handleSectionChange('pending-tutors')}
+                        >
+                          <i className="bi bi-person-check me-2"></i>
+                          Review Pending Tutors ({tutors.length})
+                        </button>
+                        <button 
+                          className="btn btn-success"
+                          onClick={() => handleSectionChange('all-bookings')}
+                        >
+                          <i className="bi bi-calendar-check me-2"></i>
+                          View All Bookings
+                        </button>
+                        <button 
+                          className="btn btn-info"
+                          onClick={() => handleSectionChange('platform-report')}
+                        >
+                          <i className="bi bi-graph-up me-2"></i>
+                          View Platform Report
+                        </button>
+                      </div>
+                    </CCardBody>
+                  </CCard>
+                </CCol>
+                <CCol md={6}>
+                  <CCard>
+                    <CCardHeader>
+                      <CCardTitle>Platform Statistics</CCardTitle>
+                    </CCardHeader>
+                    <CCardBody>
+                      {loadingReport ? (
+                        <div className="text-center py-4">
+                          <div className="spinner-border text-primary" role="status">
+                            <span className="visually-hidden">Loading...</span>
+                          </div>
+                        </div>
+                      ) : report ? (
+                        <div>
+                          <div className="d-flex justify-content-between py-2 border-bottom">
+                            <span>Average Rating:</span>
+                            <strong>{report.summary?.average_tutor_rating || 0}/5 ⭐</strong>
+                          </div>
+                          <div className="d-flex justify-content-between py-2 border-bottom">
+                            <span>Total Revenue:</span>
+                            <strong>€{report.summary?.total_revenue || 0}</strong>
+                          </div>
+                          <div className="d-flex justify-content-between py-2">
+                            <span>Active Sessions:</span>
+                            <strong>{report.summary?.active_bookings || 0}</strong>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-muted">No statistics available</p>
+                      )}
+                    </CCardBody>
+                  </CCard>
+                </CCol>
+              </CRow>
+            </>
           )}
-        </div>
-      </div>
 
-      {/* Professional Navigation Tabs */}
-      <div className="card mb-4">
-        <div className="card-body p-0">
-          <ul className="nav nav-tabs nav-justified" role="tablist">
-            <li className="nav-item" role="presentation">
-              <button
-                className={`nav-link ${activeSection === 'pending-tutors' ? 'active' : ''}`}
-                onClick={() => handleSectionChange('pending-tutors')}
-                type="button"
-              >
-                <i className="bi bi-person-check me-2"></i>
-                Pending Tutors
-                {tutors.length > 0 && (
-                  <span className="badge bg-warning text-dark ms-2">{tutors.length}</span>
+          {/* pending tutor applications - using coreui CCard from the template */}
+          {activeSection === 'pending-tutors' && (
+            <>
+              <h1 className="mb-3">Pending Tutor Applications</h1>
+              <p className="text-muted mb-4">Review and approve tutor applications</p>
+
+              <CCard>
+                <CCardHeader>
+                  <CCardTitle>Tutor Applications</CCardTitle>
+                </CCardHeader>
+                <CCardBody>
+                {tutors.length === 0 ? (
+                  <div className="text-center py-5">
+                    <i className="bi bi-check-circle" style={{ fontSize: "3rem", color: "#10b981" }}></i>
+                    <h5 className="mt-3">All Clear!</h5>
+                    <p className="text-muted">No unverified tutors found. All tutor applications have been processed.</p>
+                  </div>
+                ) : (
+                  <div className="table-responsive">
+                    <table className="table table-hover">
+                      <thead>
+                        <tr>
+                          <th>Name</th>
+                          <th>Email</th>
+                          <th>Modules</th>
+                          <th>Hourly Rate</th>
+                          <th>Bio</th>
+                          <th>Proof Document</th>
+                          <th className="text-center">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tutors.slice((tutorsCurrentPage - 1) * TUTORS_PER_PAGE, tutorsCurrentPage * TUTORS_PER_PAGE).map((tutor) => (
+                          <tr key={tutor.tutor_id}>
+                            <td className="align-middle">
+                              <strong>{tutor.first_name} {tutor.last_name}</strong>
+                            </td>
+                            <td className="align-middle">
+                              <a href={`mailto:${tutor.college_email}`} className="text-decoration-none">
+                                {tutor.college_email}
+                              </a>
+                            </td>
+                            <td className="align-middle">
+                              <span className="badge bg-info text-dark">{tutor.modules}</span>
+                            </td>
+                            <td className="align-middle">
+                              <span className="fw-bold text-success">€{tutor.hourly_rate}</span>
+                            </td>
+                            <td className="align-middle">
+                              <small className="text-muted" style={{ maxWidth: "200px", display: "block" }}>
+                                {tutor.bio || <em>No bio provided</em>}
+                              </small>
+                            </td>
+                            <td className="align-middle">
+                              {tutor.proof_doc ? (
+                                <button
+                                  onClick={() => setViewingDocument(tutor.tutor_id)}
+                                  className="btn btn-sm btn-outline-primary"
+                                  title="View proof document"
+                                >
+                                  View Document
+                                </button>
+                              ) : (
+                                <span className="badge bg-secondary">No document</span>
+                              )}
+                            </td>
+                            <td className="text-center align-middle">
+                              <button
+                                className="btn btn-success btn-sm me-2"
+                                onClick={() => handleApprove(tutor.tutor_id)}
+                                title="Approve tutor"
+                              >
+                                Approve
+                              </button>
+                              <button
+                                className="btn btn-danger btn-sm"
+                                onClick={() => handleReject(tutor.tutor_id)}
+                                title="Reject tutor"
+                              >
+                                Reject
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {Math.ceil(tutors.length / TUTORS_PER_PAGE) > 1 && (
+                      <nav className="mt-3 d-flex justify-content-center">
+                        <ul className="pagination">
+                          <li className={`page-item ${tutorsCurrentPage === 1 ? 'disabled' : ''}`}>
+                            <button className="page-link" onClick={() => setTutorsCurrentPage(p => p - 1)}>Previous</button>
+                          </li>
+                          {Array.from({ length: Math.ceil(tutors.length / TUTORS_PER_PAGE) }, (_, i) => (
+                            <li key={i + 1} className={`page-item ${tutorsCurrentPage === i + 1 ? 'active' : ''}`}>
+                              <button className="page-link" onClick={() => setTutorsCurrentPage(i + 1)}>{i + 1}</button>
+                            </li>
+                          ))}
+                          <li className={`page-item ${tutorsCurrentPage === Math.ceil(tutors.length / TUTORS_PER_PAGE) ? 'disabled' : ''}`}>
+                            <button className="page-link" onClick={() => setTutorsCurrentPage(p => p + 1)}>Next</button>
+                          </li>
+                        </ul>
+                      </nav>
+                    )}
+                  </div>
                 )}
-              </button>
-            </li>
-            <li className="nav-item" role="presentation">
-              <button
-                className={`nav-link ${activeSection === 'all-bookings' ? 'active' : ''}`}
-                onClick={() => handleSectionChange('all-bookings')}
-                type="button"
-              >
-                <i className="bi bi-calendar-check me-2"></i>
-                All Bookings
-              </button>
-            </li>
-            <li className="nav-item" role="presentation">
-              <button
-                className={`nav-link ${activeSection === 'all-reviews' ? 'active' : ''}`}
-                onClick={() => handleSectionChange('all-reviews')}
-                type="button"
-              >
-                <i className="bi bi-star me-2"></i>
-                All Reviews
-              </button>
-            </li>
-            <li className="nav-item" role="presentation">
-              <button
-                className={`nav-link ${activeSection === 'user-management' ? 'active' : ''}`}
-                onClick={() => handleSectionChange('user-management')}
-                type="button"
-              >
-                <i className="bi bi-people me-2"></i>
-                User Management
-              </button>
-            </li>
-            <li className="nav-item" role="presentation">
-              <button
-                className={`nav-link ${activeSection === 'platform-report' ? 'active' : ''}`}
-                onClick={() => handleSectionChange('platform-report')}
-                type="button"
-              >
-                <i className="bi bi-graph-up me-2"></i>
-                Platform Report
-              </button>
-            </li>
-          </ul>
-        </div>
-      </div>
+                </CCardBody>
+              </CCard>
+            </>
+          )}
 
-      {/* Error Messages */}
-      {reportError && (
-        <div className="alert alert-danger mb-3">{reportError}</div>
-      )}
+          {/* all bookings section - coreui CCard component */}
+          {activeSection === 'all-bookings' && (
+            <>
+              <h1 className="mb-3">All Bookings</h1>
+              <p className="text-muted mb-4">View all platform bookings</p>
+              <CCard>
+                <CCardHeader>
+                  <CCardTitle>Booking List</CCardTitle>
+                </CCardHeader>
+                <CCardBody>
+                  <AdminAllBookings />
+                </CCardBody>
+              </CCard>
+            </>
+          )}
 
-      {/* Content Sections - Only show active section */}
-      <div className="tab-content">
-        {/* Pending Tutor Applications */}
-        {activeSection === 'pending-tutors' && (
-          <div className="card">
-            <div className="card-body">
-              <div className="page-header mb-4">
-                <h3 className="mb-0">
-                  <i className="bi bi-person-check me-2"></i>
-                  Pending Tutor Applications
-                </h3>
-              </div>
-      {tutors.length === 0 ? (
-                <div className="empty-state">
-                  <div className="empty-state-icon">
-                    <i className="bi bi-check-circle"></i>
+          {/* all reviews section - using coreui components */}
+          {activeSection === 'all-reviews' && (
+            <>
+              <h1 className="mb-3">All Reviews</h1>
+              <p className="text-muted mb-4">View all platform reviews</p>
+              <CCard>
+                <CCardHeader>
+                  <CCardTitle>Review List</CCardTitle>
+                </CCardHeader>
+                <CCardBody>
+                  <AdminAllReviews />
+                </CCardBody>
+              </CCard>
+            </>
+          )}
+
+          {/* user management section - coreui CCard from the github template */}
+          {activeSection === 'user-management' && (
+            <>
+              <h1 className="mb-3">User Management</h1>
+              <p className="text-muted mb-4">Manage platform users</p>
+              <CCard>
+                <CCardHeader>
+                  <CCardTitle>Users</CCardTitle>
+                </CCardHeader>
+                <CCardBody>
+                {loadingUsers && (
+                  <div className="alert alert-info d-flex align-items-center">
+                    <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    Loading users...
                   </div>
-                  <h5>All Clear!</h5>
-                  <p>
-              No unverified tutors found. All tutor applications have been processed.
-            </p>
-        </div>
-      ) : (
-            <div className="table-responsive">
-              <table className="table table-hover mb-0">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Modules</th>
-                    <th>Hourly Rate</th>
-                    <th>Bio</th>
-                    <th>Proof Document</th>
-                    <th className="text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tutors.map((tutor) => (
-                    <tr key={tutor.tutor_id}>
-                      <td className="align-middle">
-                        <strong>{tutor.first_name} {tutor.last_name}</strong>
-                      </td>
-                      <td className="align-middle">
-                        <a href={`mailto:${tutor.college_email}`} className="text-decoration-none">
-                          {tutor.college_email}
-                        </a>
-                      </td>
-                      <td className="align-middle">
-                        <span className="badge bg-info text-dark">{tutor.modules}</span>
-                      </td>
-                      <td className="align-middle">
-                        <span className="fw-bold text-success">€{tutor.hourly_rate}</span>
-                      </td>
-                      <td className="align-middle">
-                        <small className="text-muted" style={{ maxWidth: "200px", display: "block" }}>
-                          {tutor.bio || <em>No bio provided</em>}
-                        </small>
-                      </td>
-                      <td className="align-middle">
-                        {tutor.proof_doc ? (
-                          <button
-                            onClick={() => setViewingDocument(tutor.tutor_id)}
-                            className="btn btn-sm btn-outline-primary"
-                            title="View proof document"
-                          >
-                                View Document
-                          </button>
-                        ) : (
-                          <span className="badge bg-secondary">No document</span>
-                        )}
-                      </td>
-                      <td className="text-center align-middle">
-                        <button
-                          className="btn btn-success btn-sm me-2"
-                          onClick={() => handleApprove(tutor.tutor_id)}
-                          title="Approve tutor"
-                        >
-                          Approve
-                        </button>
-                        <button
-                          className="btn btn-danger btn-sm"
-                          onClick={() => handleReject(tutor.tutor_id)}
-                          title="Reject tutor"
-                        >
-                          Reject
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+                )}
+                
+                {usersError && (
+                  <div className="alert alert-danger">{usersError}</div>
+                )}
 
-        {/* All Bookings Section */}
-        {activeSection === 'all-bookings' && (
-          <div className="card">
-            <div className="card-body">
-              <div className="page-header mb-4">
-                <h3 className="mb-0">
-                  <i className="bi bi-calendar-check me-2"></i>
-                  All Bookings
-                </h3>
-              </div>
-              <AdminAllBookings />
-          </div>
-        </div>
-      )}
-
-        {/* All Reviews Section */}
-        {activeSection === 'all-reviews' && (
-          <div className="card">
-            <div className="card-body">
-              <div className="page-header mb-4">
-                <h3 className="mb-0">
-                  <i className="bi bi-star me-2"></i>
-                  All Reviews
-                </h3>
-              </div>
-              <AdminAllReviews />
-            </div>
-          </div>
-        )}
-
-        {/* User Management Section */}
-        {activeSection === 'user-management' && (
-          <div className="card">
-            <div className="card-body">
-              <div className="page-header mb-4">
-                <h3 className="mb-0">
-                  <i className="bi bi-people me-2"></i>
-                  User Management
-                </h3>
-              </div>
-              
-              {loadingUsers && (
-                <div className="alert alert-info d-flex align-items-center">
-                  <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                  Loading users...
-                </div>
-              )}
-              
-              {usersError && (
-                <div className="alert alert-danger">{usersError}</div>
-              )}
-
-              {!loadingUsers && !usersError && users.length === 0 ? (
-                <div className="empty-state">
-                  <div className="empty-state-icon">
-                    <i className="bi bi-people"></i>
+                {!loadingUsers && !usersError && users.length === 0 ? (
+                  <div className="text-center py-5">
+                    <i className="bi bi-people" style={{ fontSize: "3rem", color: "#64748b" }}></i>
+                    <h5 className="mt-3">No Users Found</h5>
+                    <p className="text-muted">No users registered in the system.</p>
                   </div>
-                  <h5>No Users Found</h5>
-                  <p>No users registered in the system.</p>
-                </div>
-              ) : (
-                <div className="table-responsive">
-                    <table className="table table-hover mb-0">
+                ) : (
+                  <>
+                  <div className="table-responsive">
+                    <table className="table table-hover">
                       <thead>
                         <tr>
                           <th>Email</th>
@@ -437,7 +816,8 @@ function AdminDashboard() {
                         </tr>
                       </thead>
                       <tbody>
-                        {users.map((user) => (
+                        {/* Iteration 5 - Paginated slice */}
+                        {users.slice((usersCurrentPage - 1) * USERS_PER_PAGE, usersCurrentPage * USERS_PER_PAGE).map((user) => (
                           <tr key={user.user_id}>
                             <td className="align-middle">
                               <strong>{user.email}</strong>
@@ -456,7 +836,7 @@ function AdminDashboard() {
                                 <span className="text-muted small">{user.student_name}</span>
                               )}
                               {user.role === 'tutor' && user.tutor_name && (
-          <div>
+                                <div>
                                   <span className="text-muted small">{user.tutor_name}</span>
                                   {user.tutor_verified === 1 && (
                                     <span className="badge bg-success ms-2" style={{ fontSize: "0.7rem" }}>Verified</span>
@@ -517,25 +897,56 @@ function AdminDashboard() {
                         ))}
                       </tbody>
                     </table>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Platform Report Section */}
-        {activeSection === 'platform-report' && (
-          <div className="card">
-            <div className="card-body">
-              <div className="page-header mb-4">
-                <div className="d-flex justify-content-between align-items-start">
-                  <div>
-                    <h3 className="mb-0">
-                      <i className="bi bi-graph-up me-2"></i>
-                      Platform Report
-                    </h3>
-                    <p className="text-muted mb-0 mt-2">Overview of platform statistics and metrics</p>
                   </div>
+
+                  {/* Iteration 5 - Pagination controls */}
+                  {Math.ceil(users.length / USERS_PER_PAGE) > 1 && (
+                    <nav className="mt-3 d-flex justify-content-center">
+                      <ul className="pagination">
+                        <li className={`page-item ${usersCurrentPage === 1 ? 'disabled' : ''}`}>
+                          <button className="page-link" onClick={() => setUsersCurrentPage(p => p - 1)}>Previous</button>
+                        </li>
+                        {Array.from({ length: Math.ceil(users.length / USERS_PER_PAGE) }, (_, i) => (
+                          <li key={i + 1} className={`page-item ${usersCurrentPage === i + 1 ? 'active' : ''}`}>
+                            <button className="page-link" onClick={() => setUsersCurrentPage(i + 1)}>{i + 1}</button>
+                          </li>
+                        ))}
+                        <li className={`page-item ${usersCurrentPage === Math.ceil(users.length / USERS_PER_PAGE) ? 'disabled' : ''}`}>
+                          <button className="page-link" onClick={() => setUsersCurrentPage(p => p + 1)}>Next</button>
+                        </li>
+                      </ul>
+                    </nav>
+                  )}
+                  </>
+                )}
+                </CCardBody>
+              </CCard>
+            </>
+          )}
+
+          {/* platform report section - using coreui components from https://github.com/coreui/coreui-free-react-admin-template */}
+          {activeSection === 'platform-report' && (
+            <>
+              <div className="d-flex justify-content-between align-items-start mb-4">
+                <div>
+                  <h1 className="mb-2">Platform Report</h1>
+                  <p className="text-muted">Overview of platform statistics and metrics</p>
+                </div>
+                <div className="d-flex gap-2">
+                  <button 
+                    className="btn btn-outline-primary btn-sm" 
+                    onClick={generateReport}
+                    disabled={loadingReport}
+                  >
+                    {loadingReport ? (
+                      <span className="spinner-border spinner-border-sm"></span>
+                    ) : (
+                      <>
+                        <i className="bi bi-arrow-clockwise me-2"></i>
+                        Refresh
+                      </>
+                    )}
+                  </button>
                   <button 
                     className="btn btn-outline-secondary btn-sm" 
                     onClick={exportReport}
@@ -545,57 +956,92 @@ function AdminDashboard() {
                     <i className="bi bi-download me-2"></i>
                     Export
                   </button>
-        </div>
-      </div>
+                </div>
+              </div>
 
               {loadingReport ? (
                 <div className="text-center py-5">
-                  <div className="spinner-border text-primary" role="status">
-                    <span className="visually-hidden">Loading...</span>
-                  </div>
-                  <p className="text-muted mt-3 mb-0">Generating platform report...</p>
+                <div className="spinner-border text-primary" role="status">
+                  <span className="visually-hidden">Loading...</span>
+                </div>
+                <p className="text-muted mt-3 mb-0">Generating platform report...</p>
                 </div>
               ) : report ? (
                 <>
-                  {/* Professional Stats Grid */}
-                  <div className="row g-4 mb-4">
-                    <div className="col-md-3">
-                      <div className="stats-card bg-primary text-white">
-                        <div className="value">{report.summary?.total_users || 0}</div>
-                        <div className="label">Total Users</div>
-                      </div>
-                    </div>
-                    <div className="col-md-3">
-                      <div className="stats-card bg-success text-white">
-                        <div className="value">{report.summary?.total_bookings || 0}</div>
-                        <div className="label">Total Bookings</div>
-                      </div>
-                    </div>
-                    <div className="col-md-3">
-                      <div className="stats-card bg-info text-white">
-                        <div className="value">{report.summary?.total_verified_tutors || 0}</div>
-                        <div className="label">Verified Tutors</div>
-                      </div>
-                    </div>
-                    <div className="col-md-3">
-                      <div className="stats-card bg-warning text-dark">
-                        <div className="value">{report.summary?.average_tutor_rating || 0}/5</div>
-                        <div className="label">Avg Rating</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="alert alert-info">
-                    <i className="bi bi-info-circle me-2"></i>
-                    <strong>Note:</strong> Click "Refresh Report" in the header to update the statistics.
-                  </div>
+                {/* stats grid - coreui CRow and CCol from the template */}
+                <CRow className="g-4 mb-4">
+                  <CCol md={3}>
+                    <CCard>
+                      <CCardBody>
+                        <div className="d-flex align-items-center">
+                          <div className="flex-shrink-0">
+                            <i className="bi bi-people fs-1 text-primary"></i>
+                          </div>
+                          <div className="flex-grow-1 ms-3">
+                            <div className="fs-4 fw-bold">{report.summary?.total_users || 0}</div>
+                            <div className="text-muted small">Total Users</div>
+                          </div>
+                        </div>
+                      </CCardBody>
+                    </CCard>
+                  </CCol>
+                  <CCol md={3}>
+                    <CCard>
+                      <CCardBody>
+                        <div className="d-flex align-items-center">
+                          <div className="flex-shrink-0">
+                            <i className="bi bi-calendar-check fs-1 text-success"></i>
+                          </div>
+                          <div className="flex-grow-1 ms-3">
+                            <div className="fs-4 fw-bold">{report.summary?.total_bookings || 0}</div>
+                            <div className="text-muted small">Total Bookings</div>
+                          </div>
+                        </div>
+                      </CCardBody>
+                    </CCard>
+                  </CCol>
+                  <CCol md={3}>
+                    <CCard>
+                      <CCardBody>
+                        <div className="d-flex align-items-center">
+                          <div className="flex-shrink-0">
+                            <i className="bi bi-person-check fs-1 text-info"></i>
+                          </div>
+                          <div className="flex-grow-1 ms-3">
+                            <div className="fs-4 fw-bold">{report.summary?.total_verified_tutors || 0}</div>
+                            <div className="text-muted small">Verified Tutors</div>
+                          </div>
+                        </div>
+                      </CCardBody>
+                    </CCard>
+                  </CCol>
+                  <CCol md={3}>
+                    <CCard>
+                      <CCardBody>
+                        <div className="d-flex align-items-center">
+                          <div className="flex-shrink-0">
+                            <i className="bi bi-star fs-1 text-warning"></i>
+                          </div>
+                          <div className="flex-grow-1 ms-3">
+                            <div className="fs-4 fw-bold">{report.summary?.average_tutor_rating || 0}/5</div>
+                            <div className="text-muted small">Avg Rating</div>
+                          </div>
+                        </div>
+                      </CCardBody>
+                    </CCard>
+                  </CCol>
+                </CRow>
+                <div className="alert alert-info">
+                  <i className="bi bi-info-circle me-2"></i>
+                  <strong>Note:</strong> Click "Refresh" to update the statistics.
+                </div>
                 </>
               ) : (
-                <div className="empty-state">
-                  <div className="empty-state-icon">
-                    <i className="bi bi-graph-up"></i>
-                  </div>
-                  <h5>No Report Generated</h5>
-                  <p className="mb-4">Click "Refresh Report" in the header to generate a platform report.</p>
+                <CCard>
+                <CCardBody className="text-center py-5">
+                  <i className="bi bi-graph-up" style={{ fontSize: "3rem", color: "#64748b" }}></i>
+                  <h5 className="mt-3">No Report Generated</h5>
+                  <p className="text-muted mb-4">Click "Refresh" to generate a platform report.</p>
                   <button 
                     className="btn btn-primary"
                     onClick={generateReport}
@@ -608,12 +1054,151 @@ function AdminDashboard() {
                     )}
                     Generate Report
                   </button>
-                </div>
+                </CCardBody>
+                </CCard>
               )}
+            </>
+          )}
+        </CContainer>
+      </div>
+
+      {/* Settings Modal */}
+      {showSettingsModal && (
+        <div 
+          className="modal fade show" 
+          style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}
+          tabIndex="-1"
+        >
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">
+                  <i className="bi bi-gear me-2"></i>Settings
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => {
+                    setShowSettingsModal(false);
+                    setPasswordError('');
+                    setPasswordSuccess('');
+                    setPasswordForm({
+                      current_password: '',
+                      new_password: '',
+                      confirm_password: ''
+                    });
+                  }}
+                  aria-label="Close"
+                ></button>
+              </div>
+              <div className="modal-body">
+                <h6 className="mb-3">Change Password</h6>
+                
+                {passwordError && (
+                  <div className="alert alert-danger" role="alert">
+                    <i className="bi bi-exclamation-triangle me-2"></i>
+                    {passwordError}
+                  </div>
+                )}
+                
+                {passwordSuccess && (
+                  <div className="alert alert-success" role="alert">
+                    <i className="bi bi-check-circle me-2"></i>
+                    {passwordSuccess}
+                  </div>
+                )}
+                
+                <form onSubmit={handlePasswordChange}>
+                  <div className="mb-3">
+                    <label htmlFor="current_password" className="form-label">
+                      Current Password *
+                    </label>
+                    <input
+                      type="password"
+                      className="form-control"
+                      id="current_password"
+                      value={passwordForm.current_password}
+                      onChange={(e) => setPasswordForm({...passwordForm, current_password: e.target.value})}
+                      required
+                      disabled={changingPassword}
+                    />
+                  </div>
+                  
+                  <div className="mb-3">
+                    <label htmlFor="new_password" className="form-label">
+                      New Password *
+                    </label>
+                    <input
+                      type="password"
+                      className="form-control"
+                      id="new_password"
+                      value={passwordForm.new_password}
+                      onChange={(e) => setPasswordForm({...passwordForm, new_password: e.target.value})}
+                      required
+                      minLength="6"
+                      disabled={changingPassword}
+                    />
+                    <small className="text-muted">Must be at least 6 characters long</small>
+                  </div>
+                  
+                  <div className="mb-3">
+                    <label htmlFor="confirm_password" className="form-label">
+                      Confirm New Password *
+                    </label>
+                    <input
+                      type="password"
+                      className="form-control"
+                      id="confirm_password"
+                      value={passwordForm.confirm_password}
+                      onChange={(e) => setPasswordForm({...passwordForm, confirm_password: e.target.value})}
+                      required
+                      minLength="6"
+                      disabled={changingPassword}
+                    />
+                  </div>
+                  
+                  <div className="d-flex justify-content-end gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        setShowSettingsModal(false);
+                        setPasswordError('');
+                        setPasswordSuccess('');
+                        setPasswordForm({
+                          current_password: '',
+                          new_password: '',
+                          confirm_password: ''
+                        });
+                      }}
+                      disabled={changingPassword}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn btn-primary"
+                      disabled={changingPassword}
+                    >
+                      {changingPassword ? (
+                        <>
+                          <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                          Changing...
+                        </>
+                      ) : (
+                        <>
+                          <i className="bi bi-key me-2"></i>
+                          Change Password
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Story 15 - Modal for viewing proof documents */}
       {viewingDocument && (
@@ -693,6 +1278,10 @@ const AdminAllBookings = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // Iteration 5 - Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
+
   useEffect(() => {
     fetchAllBookings();
   }, []);
@@ -711,114 +1300,136 @@ const AdminAllBookings = () => {
   };
 
   return (
-    <div className="p-3">
-        {loading && (
-          <div className="alert alert-info d-flex align-items-center">
-            <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-            Loading bookings...
-          </div>
-        )}
-        
-        {error && (
-          <div className="alert alert-danger">{error}</div>
-        )}
+    <div>
+      {loading && (
+        <div className="alert alert-info d-flex align-items-center">
+          <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+          Loading bookings...
+        </div>
+      )}
+      
+      {error && (
+        <div className="alert alert-danger">{error}</div>
+      )}
 
-        {!loading && !error && bookings.length === 0 ? (
-          <div className="text-center py-5">
-            <h5 className="fw-semibold mb-2">No Bookings Yet</h5>
-            <p className="text-muted mb-0">No tutoring sessions have been booked yet.</p>
-          </div>
-        ) : (
-          <div className="table-responsive">
-            <table className="table table-hover mb-0">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Time</th>
-                  <th>Duration</th>
-                  <th>Learner</th>
-                  <th>Tutor</th>
-                  <th>Modules</th>
-                  <th>Status</th>
-                  <th>Created</th>
-                  <th>Last Updated</th>
-                </tr>
-              </thead>
-              <tbody>
-                {bookings.map((booking) => (
-                  <tr key={booking.booking_id}>
-                    <td className="align-middle">
-                      <strong>{new Date(booking.session_date).toLocaleDateString('en-US', { 
-                        weekday: 'short',
+      {!loading && !error && bookings.length === 0 ? (
+        <div className="text-center py-5">
+          <h5 className="fw-semibold mb-2">No Bookings Yet</h5>
+          <p className="text-muted mb-0">No tutoring sessions have been booked yet.</p>
+        </div>
+      ) : (
+        <>
+        <div className="table-responsive">
+          <table className="table table-hover">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Duration</th>
+                <th>Learner</th>
+                <th>Tutor</th>
+                <th>Modules</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Last Updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              {/* Iteration 5 - Paginated slice */}
+              {bookings.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((booking) => (
+                <tr key={booking.booking_id}>
+                  <td className="align-middle">
+                    <strong>{new Date(booking.session_date).toLocaleDateString('en-US', { 
+                      weekday: 'short',
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric'
+                    })}</strong>
+                  </td>
+                  <td className="align-middle">{booking.session_time}</td>
+                  <td className="align-middle">
+                    <span className="badge bg-secondary">{booking.duration} min</span>
+                  </td>
+                  <td className="align-middle">
+                    <div>
+                      <strong>{booking.learner_name}</strong>
+                      <br />
+                      <small className="text-muted">{booking.learner_email}</small>
+                    </div>
+                  </td>
+                  <td className="align-middle">
+                    <strong>{booking.tutor_name}</strong>
+                  </td>
+                  <td className="align-middle">
+                    <span className="badge bg-info text-dark">{booking.module || 'N/A'}</span>
+                  </td>
+                  <td className="align-middle">
+                    <span className={`badge ${
+                      booking.status === "cancelled" 
+                        ? "bg-danger"
+                        : booking.status === "rescheduled" 
+                        ? "bg-warning text-dark"
+                        : booking.status === "pending"
+                        ? "bg-secondary"
+                        : booking.status === "completed"
+                        ? "bg-success"
+                        : booking.status === "missed"
+                        ? "bg-dark"
+                        : "bg-success"
+                    }`}>
+                      {booking.status}
+                    </span>
+                  </td>
+                  {/* Story 13 - Show full timestamp (date and time) for created_at */}
+                  <td className="align-middle">
+                    <small className="text-muted" title={booking.created_at}>
+                      {booking.created_at ? new Date(booking.created_at).toLocaleString('en-US', {
                         year: 'numeric',
                         month: 'short',
-                        day: 'numeric'
-                      })}</strong>
-                    </td>
-                    <td className="align-middle">{booking.session_time}</td>
-                    <td className="align-middle">
-                      <span className="badge bg-secondary">{booking.duration} min</span>
-                    </td>
-                    <td className="align-middle">
-                      <div>
-                        <strong>{booking.learner_name}</strong>
-                        <br />
-                        <small className="text-muted">{booking.learner_email}</small>
-                      </div>
-                    </td>
-                    <td className="align-middle">
-                      <strong>{booking.tutor_name}</strong>
-                    </td>
-                    <td className="align-middle">
-                      <span className="badge bg-info text-dark">{booking.module || 'N/A'}</span>
-                    </td>
-                    <td className="align-middle">
-                      <span className={`badge ${
-                        booking.status === "cancelled" 
-                          ? "bg-danger"
-                          : booking.status === "rescheduled" 
-                          ? "bg-warning text-dark"
-                          : booking.status === "pending"
-                          ? "bg-secondary"
-                          : booking.status === "completed"
-                          ? "bg-success"
-                          : booking.status === "missed"
-                          ? "bg-dark"
-                          : "bg-success"
-                      }`}>
-                        {booking.status}
-                      </span>
-                    </td>
-                    {/* Story 13 - Show full timestamp (date and time) for created_at */}
-                    <td className="align-middle">
-                      <small className="text-muted" title={booking.created_at}>
-                        {booking.created_at ? new Date(booking.created_at).toLocaleString('en-US', {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        }) : 'N/A'}
-                      </small>
-                    </td>
-                    {/* Story 13 - Show full timestamp (date and time) for updated_at */}
-                    <td className="align-middle">
-                      <small className="text-muted" title={booking.updated_at}>
-                        {booking.updated_at ? new Date(booking.updated_at).toLocaleString('en-US', {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        }) : 'N/A'}
-                      </small>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      }) : 'N/A'}
+                    </small>
+                  </td>
+                  {/* Story 13 - Show full timestamp (date and time) for updated_at */}
+                  <td className="align-middle">
+                    <small className="text-muted" title={booking.updated_at}>
+                      {booking.updated_at ? new Date(booking.updated_at).toLocaleString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      }) : 'N/A'}
+                    </small>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Iteration 5 - Pagination controls */}
+        {Math.ceil(bookings.length / ITEMS_PER_PAGE) > 1 && (
+          <nav className="mt-3 d-flex justify-content-center">
+            <ul className="pagination">
+              <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
+                <button className="page-link" onClick={() => setCurrentPage(p => p - 1)}>Previous</button>
+              </li>
+              {Array.from({ length: Math.ceil(bookings.length / ITEMS_PER_PAGE) }, (_, i) => (
+                <li key={i + 1} className={`page-item ${currentPage === i + 1 ? 'active' : ''}`}>
+                  <button className="page-link" onClick={() => setCurrentPage(i + 1)}>{i + 1}</button>
+                </li>
+              ))}
+              <li className={`page-item ${currentPage === Math.ceil(bookings.length / ITEMS_PER_PAGE) ? 'disabled' : ''}`}>
+                <button className="page-link" onClick={() => setCurrentPage(p => p + 1)}>Next</button>
+              </li>
+            </ul>
+          </nav>
         )}
+        </>
+      )}
     </div>
   );
 };
@@ -847,6 +1458,10 @@ const AdminAllReviews = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // Iteration 5 - Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
+
   useEffect(() => {
     fetchAllReviews();
   }, []);
@@ -865,78 +1480,100 @@ const AdminAllReviews = () => {
   };
 
   return (
-    <div className="p-3">
-        {loading && (
-          <div className="alert alert-info d-flex align-items-center">
-            <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-            Loading reviews...
-          </div>
-        )}
-        
-        {error && (
-          <div className="alert alert-danger">{error}</div>
-        )}
+    <div>
+      {loading && (
+        <div className="alert alert-info d-flex align-items-center">
+          <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+          Loading reviews...
+        </div>
+      )}
+      
+      {error && (
+        <div className="alert alert-danger">{error}</div>
+      )}
 
-        {!loading && !error && reviews.length === 0 ? (
-          <div className="text-center py-5">
-            <h5 className="fw-semibold mb-2">No Reviews Yet</h5>
-            <p className="text-muted mb-0">No reviews have been submitted yet.</p>
-          </div>
-        ) : (
-          <div className="table-responsive">
-            <table className="table table-hover mb-0">
-              <thead>
-                <tr>
-                  <th>Rating</th>
-                  <th>Learner</th>
-                  <th>Tutor</th>
-                  <th>Modules</th>
-                  <th>Comment</th>
-                  <th>Date</th>
+      {!loading && !error && reviews.length === 0 ? (
+        <div className="text-center py-5">
+          <h5 className="fw-semibold mb-2">No Reviews Yet</h5>
+          <p className="text-muted mb-0">No reviews have been submitted yet.</p>
+        </div>
+      ) : (
+        <>
+        <div className="table-responsive">
+          <table className="table table-hover">
+            <thead>
+              <tr>
+                <th>Rating</th>
+                <th>Learner</th>
+                <th>Tutor</th>
+                <th>Modules</th>
+                <th>Comment</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {/* Iteration 5 - Paginated slice */}
+              {reviews.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((review) => (
+                <tr key={review.review_id}>
+                  <td className="align-middle">
+                    <span className="badge bg-warning text-dark" style={{ fontSize: "1rem" }}>
+                      {review.rating}/5 ⭐
+                    </span>
+                  </td>
+                  <td className="align-middle">
+                    <strong>{review.learner_name}</strong>
+                  </td>
+                  <td className="align-middle">
+                    <strong>{review.tutor_name}</strong>
+                  </td>
+                  <td className="align-middle">
+                    <span className="badge bg-info text-dark">{review.tutor_modules}</span>
+                  </td>
+                  <td className="align-middle">
+                    {review.comment ? (
+                      <small>{review.comment}</small>
+                    ) : (
+                      <em className="text-muted">No comment</em>
+                    )}
+                  </td>
+                  {/* Story 13 - Show full timestamp (date and time) for review created_at */}
+                  <td className="align-middle">
+                    <small className="text-muted" title={review.created_at}>
+                      {review.created_at ? new Date(review.created_at).toLocaleString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      }) : 'N/A'}
+                    </small>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {reviews.map((review) => (
-                  <tr key={review.review_id}>
-                    <td className="align-middle">
-                      <span className="badge bg-warning text-dark" style={{ fontSize: "1rem" }}>
-                        {review.rating}/5 ⭐
-                      </span>
-                    </td>
-                    <td className="align-middle">
-                      <strong>{review.learner_name}</strong>
-                    </td>
-                    <td className="align-middle">
-                      <strong>{review.tutor_name}</strong>
-                    </td>
-                    <td className="align-middle">
-                      <span className="badge bg-info text-dark">{review.tutor_modules}</span>
-                    </td>
-                    <td className="align-middle">
-                      {review.comment ? (
-                        <small>{review.comment}</small>
-                      ) : (
-                        <em className="text-muted">No comment</em>
-                      )}
-                    </td>
-                    {/* Story 13 - Show full timestamp (date and time) for review created_at */}
-                    <td className="align-middle">
-                      <small className="text-muted" title={review.created_at}>
-                        {review.created_at ? new Date(review.created_at).toLocaleString('en-US', {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        }) : 'N/A'}
-                      </small>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Iteration 5 - Pagination controls */}
+        {Math.ceil(reviews.length / ITEMS_PER_PAGE) > 1 && (
+          <nav className="mt-3 d-flex justify-content-center">
+            <ul className="pagination">
+              <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
+                <button className="page-link" onClick={() => setCurrentPage(p => p - 1)}>Previous</button>
+              </li>
+              {Array.from({ length: Math.ceil(reviews.length / ITEMS_PER_PAGE) }, (_, i) => (
+                <li key={i + 1} className={`page-item ${currentPage === i + 1 ? 'active' : ''}`}>
+                  <button className="page-link" onClick={() => setCurrentPage(i + 1)}>{i + 1}</button>
+                </li>
+              ))}
+              <li className={`page-item ${currentPage === Math.ceil(reviews.length / ITEMS_PER_PAGE) ? 'disabled' : ''}`}>
+                <button className="page-link" onClick={() => setCurrentPage(p => p + 1)}>Next</button>
+              </li>
+            </ul>
+          </nav>
         )}
+        </>
+      )}
     </div>
   );
 };

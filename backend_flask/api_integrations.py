@@ -121,7 +121,7 @@ def create_google_calendar_event(booking_data, learner_email, tutor_email, learn
         }
     
     except Exception as e:
-        print(f"[ERROR] Google Calendar API error: {e}")
+        pass
         return {
             "success": False,
             "message": f"Failed to create calendar event: {str(e)}"
@@ -225,7 +225,6 @@ def send_booking_confirmation_email(learner_email, tutor_email, learner_name, tu
         }
     
     except Exception as e:
-        print(f"[ERROR] SendGrid API error: {e}")
         return {
             "success": False,
             "message": f"Failed to send emails: {str(e)}"
@@ -335,7 +334,6 @@ def get_weather_info(city_name, api_key=None):
         }
     
     except Exception as e:
-        print(f"[ERROR] Weather API error: {e}")
         return {
             "success": False,
             "message": f"Failed to get weather info: {str(e)}"

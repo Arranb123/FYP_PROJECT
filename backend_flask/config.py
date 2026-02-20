@@ -3,6 +3,13 @@
 # IMPORTANT: Add this file to .gitignore to keep your keys secure!
 
 import os
+from pathlib import Path
+
+# Load .env file from backend_flask directory (keeps API keys out of code)
+_env_path = Path(__file__).resolve().parent / ".env"
+if _env_path.exists():
+    from dotenv import load_dotenv
+    load_dotenv(_env_path)
 
 # Google Calendar API Configuration
 # Get your credentials from: https://console.cloud.google.com/

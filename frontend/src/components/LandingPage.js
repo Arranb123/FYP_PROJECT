@@ -6,7 +6,7 @@ import React from "react";
 
 const LandingPage = ({ onShowLogin, onShowRegister }) => {
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "#ffffff" }}>
+    <div className="d-flex flex-column" style={{ minHeight: "100vh" }}>
       {/* Modern Hero Section */}
       <div 
         className="container-fluid" 
@@ -534,12 +534,8 @@ const LandingPage = ({ onShowLogin, onShowRegister }) => {
       </div>
 
       {/* Footer */}
-      <footer 
-        className="border-top py-5"
-        style={{ 
-          background: "#f9fafb",
-          marginTop: "4rem"
-        }}
+      <footer
+        className="border-top py-5 mt-auto"
       >
         <div className="container">
           <div className="row">
@@ -549,7 +545,7 @@ const LandingPage = ({ onShowLogin, onShowRegister }) => {
                 Connecting students with expert tutors to achieve academic excellence.
               </p>
               <p className="text-muted mb-0 small">
-                 2024 StudyHive. All rights reserved.
+                 StudyHive
               </p>
             </div>
           </div>

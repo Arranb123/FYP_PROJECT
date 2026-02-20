@@ -1,6 +1,10 @@
 // UX Improvement - Learner Spending/Payment History Component
 // Displays payment history and spending information for learners
 // ref: React useState hook - https://react.dev/reference/react/useState
+//
+// Pagination
+// Reference: Bootstrap 5.3 Documentation (2025) "Pagination" — https://getbootstrap.com/docs/5.3/components/pagination/
+// Used to split the payment history table across multiple pages (10 items per page).
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 
@@ -8,6 +12,8 @@ const LearnerSpending = ({ learnerId }) => {
   const [spending, setSpending] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
 
   // Fetch spending data
   const fetchSpending = useCallback(async () => {
@@ -33,6 +39,10 @@ const LearnerSpending = ({ learnerId }) => {
   useEffect(() => {
     fetchSpending();
   }, [fetchSpending]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [spending]);
 
   if (loading && !spending) {
     return (
@@ -63,6 +73,10 @@ const LearnerSpending = ({ learnerId }) => {
 
   // Calculate total spending (sum of all session costs)
   const totalSpending = spending.earnings_breakdown.reduce((sum, session) => sum + (session.session_cost || 0), 0);
+  const paginatedSessions = spending.earnings_breakdown.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
 
   return (
     <div>
@@ -160,7 +174,7 @@ const LearnerSpending = ({ learnerId }) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {spending.earnings_breakdown.map((session) => (
+                    {paginatedSessions.map((session) => (
                       <tr key={session.booking_id}>
                         <td>
                           <div>
@@ -202,6 +216,23 @@ const LearnerSpending = ({ learnerId }) => {
                   </tfoot>
                 </table>
               </div>
+            )}
+            {Math.ceil(spending.earnings_breakdown.length / ITEMS_PER_PAGE) > 1 && (
+              <nav className="mt-3 d-flex justify-content-center">
+                <ul className="pagination">
+                  <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
+                    <button className="page-link" onClick={() => setCurrentPage(p => p - 1)}>Previous</button>
+                  </li>
+                  {Array.from({ length: Math.ceil(spending.earnings_breakdown.length / ITEMS_PER_PAGE) }, (_, i) => (
+                    <li key={i + 1} className={`page-item ${currentPage === i + 1 ? 'active' : ''}`}>
+                      <button className="page-link" onClick={() => setCurrentPage(i + 1)}>{i + 1}</button>
+                    </li>
+                  ))}
+                  <li className={`page-item ${currentPage === Math.ceil(spending.earnings_breakdown.length / ITEMS_PER_PAGE) ? 'disabled' : ''}`}>
+                    <button className="page-link" onClick={() => setCurrentPage(p => p + 1)}>Next</button>
+                  </li>
+                </ul>
+              </nav>
             )}
           </div>
 

@@ -768,3 +768,827 @@ html {
   padding: 1.25rem;
   background: var(--gray-50);
 }
+
+/* CoreUI Layout Support - ensures proper sidebar and content positioning */
+/* CoreUI automatically handles layout, but this ensures compatibility */
+.wrapper {
+  position: relative;
+}
+
+/* Ensure sidebar pushes content instead of overlaying */
+.sidebar {
+  flex-shrink: 0;
+}
+
+/* Make sure header toggle button is visible */
+.header-toggler,
+[class*="header-toggler"],
+button[class*="header-toggler"],
+button.header-toggler {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  cursor: pointer !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 0.5rem !important;
+  font-size: 1.25rem !important;
+  color: #6c757d !important;
+}
+
+/* CoreUI header toggler visibility */
+[class*="header-toggler"] {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* Ensure sidebar overlays content when fixed */
+.sidebar[style*="position: fixed"],
+.sidebar {
+  z-index: 1030;
+}
+
+/* Iteration 5 - Dark Mode Support */
+/* 
+ * Dark Mode Implementation References:
+ * Material UI Documentation (2025) "Dark Mode" — https://mui.com/material-ui/customization/dark-mode/
+ * Material UI Documentation (2025) "Theming" — https://mui.com/material-ui/customization/theming/
+ * Used to provide dark mode styling for the application when the theme is set to dark.
+ * body.dark-mode class approach from ChatGPT — https://chatgpt.com/share/6990e11b-33cc-8008-ad1d-9435b9df7a9f
+ * 
+ * Color Palette Inspiration:
+ * Material Design Dark Theme Guidelines — https://material.io/design/color/dark-theme.html
+ * Used Material Design's recommended dark theme color values for better visual appeal and accessibility.
+ * 
+ * CSS Custom Properties and Dark Mode:
+ * MDN Web Docs (2025) "Using CSS custom properties (variables)" — https://developer.mozilla.org/en-US/docs/Web/CSS/Using_CSS_custom_properties
+ * Used CSS variables for consistent theming across light and dark modes.
+ */
+body.dark-mode {
+  background-color: #0f0f0f;
+  background-image: linear-gradient(135deg, #0f0f0f 0%, #1a1a1a 50%, #0f0f0f 100%);
+  background-attachment: fixed;
+  color: #e8e8e8;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Ensure headings are visible in dark mode */
+body.dark-mode h1,
+body.dark-mode h2,
+body.dark-mode h3,
+body.dark-mode h4,
+body.dark-mode h5,
+body.dark-mode h6 {
+  color: #ffffff !important;
+}
+
+body.dark-mode .card,
+body.dark-mode .modal-content {
+  background-color: #1a1a1a;
+  background: linear-gradient(145deg, #1f1f1f 0%, #1a1a1a 100%);
+  color: #e8e8e8;
+  border-color: #2d2d2d;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2),
+              0 0 0 1px rgba(255, 255, 255, 0.05);
+  transition: all 0.3s ease;
+}
+
+body.dark-mode .card:hover {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.3),
+              0 0 0 1px rgba(59, 130, 246, 0.2);
+  transform: translateY(-2px);
+  border-color: #3b82f6;
+}
+
+body.dark-mode .card-title,
+body.dark-mode .card-subtitle {
+  color: #ffffff !important;
+}
+
+body.dark-mode .table {
+  background-color: #1e1e1e;
+  color: #ffffff;
+}
+
+body.dark-mode .table thead th {
+  background: linear-gradient(180deg, #252525 0%, #1f1f1f 100%);
+  color: #ffffff;
+  border-color: #3a3a3a;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+body.dark-mode .table tbody td {
+  border-color: #333333;
+  color: #e0e0e0;
+}
+
+body.dark-mode .form-control,
+body.dark-mode .form-select {
+  background-color: #1f1f1f;
+  color: #e8e8e8;
+  border-color: #3a3a3a;
+  transition: all 0.2s ease;
+}
+
+body.dark-mode .form-control:focus,
+body.dark-mode .form-select:focus {
+  background-color: #252525;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  color: #ffffff;
+}
+
+body.dark-mode .form-control:hover,
+body.dark-mode .form-select:hover {
+  border-color: #4a4a4a;
+}
+
+body.dark-mode .form-label {
+  color: #e0e0e0 !important;
+}
+
+body.dark-mode .navbar {
+  background: linear-gradient(180deg, #1a1a1a 0%, #151515 100%) !important;
+  border-color: #2d2d2d;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+}
+
+body.dark-mode .navbar-brand {
+  color: #ffffff !important;
+}
+
+body.dark-mode .btn-nav {
+  background: linear-gradient(145deg, #252525 0%, #1f1f1f 100%);
+  border-color: #3a3a3a;
+  color: #e0e0e0;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+body.dark-mode .btn-nav:hover {
+  background: linear-gradient(145deg, #2f2f2f 0%, #252525 100%);
+  border-color: #4a4a4a;
+  color: #ffffff;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  transform: translateY(-1px);
+}
+
+body.dark-mode .btn-nav-active {
+  background: linear-gradient(145deg, #3b82f6 0%, #2563eb 100%);
+  border-color: #3b82f6;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+body.dark-mode .app-gradient-background {
+  background: linear-gradient(135deg, #0f0f0f 0%, #151515 25%, #1a1a1a 50%, #151515 75%, #0f0f0f 100%);
+  background-attachment: fixed;
+}
+
+body.dark-mode .app-gradient-background .card {
+  background: linear-gradient(145deg, #1f1f1f 0%, #1a1a1a 100%);
+  border-color: #2d2d2d;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+}
+
+/* Dark mode text visibility */
+body.dark-mode .text-muted {
+  color: #a0a0a0 !important;
+}
+
+body.dark-mode .alert {
+  color: #ffffff;
+}
+
+body.dark-mode .alert-success {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(16, 185, 129, 0.25) 100%);
+  color: #34d399;
+  border-color: #10b981;
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);
+}
+
+body.dark-mode .alert-danger {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.25) 100%);
+  color: #f87171;
+  border-color: #ef4444;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);
+}
+
+body.dark-mode .alert-warning {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(245, 158, 11, 0.25) 100%);
+  color: #fbbf24;
+  border-color: #f59e0b;
+  box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);
+}
+
+body.dark-mode .alert-info {
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.15) 0%, rgba(6, 182, 212, 0.25) 100%);
+  color: #22d3ee;
+  border-color: #06b6d4;
+  box-shadow: 0 2px 4px rgba(6, 182, 212, 0.2);
+}
+
+/* Dark mode for page headers and sections */
+body.dark-mode .page-header h1,
+body.dark-mode .page-header h2 {
+  color: #ffffff !important;
+}
+
+body.dark-mode .section-title {
+  color: #ffffff !important;
+}
+
+/* Dark mode for badges */
+body.dark-mode .badge {
+  color: #ffffff;
+}
+
+/* Dark mode for empty states */
+body.dark-mode .empty-state h5 {
+  color: #ffffff;
+}
+
+body.dark-mode .empty-state p {
+  color: #a0a0a0;
+}
+
+/* Dark mode for list groups */
+body.dark-mode .list-group-item {
+  background-color: #1e1e1e;
+  border-color: #333333;
+  color: #ffffff;
+}
+
+body.dark-mode .list-group-item:hover {
+  background-color: #2a2a2a;
+  border-color: #444444;
+}
+
+/* Dark mode for modals */
+/* Reference: Bootstrap 5.3 Modals — https://getbootstrap.com/docs/5.3/components/modal/ */
+/* Enhanced Bootstrap modals with dark mode gradients and improved visual appeal. */
+body.dark-mode .modal-header {
+  background: linear-gradient(180deg, #252525 0%, #1f1f1f 100%);
+  border-color: #3a3a3a;
+  color: #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+body.dark-mode .modal-body {
+  background: linear-gradient(145deg, #1f1f1f 0%, #1a1a1a 100%);
+  color: #e8e8e8;
+}
+
+body.dark-mode .modal-footer {
+  background: linear-gradient(180deg, #1a1a1a 0%, #1f1f1f 100%);
+  border-color: #2d2d2d;
+  box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Dark mode for footer */
+body.dark-mode footer {
+  background: linear-gradient(180deg, #1a1a1a 0%, #151515 100%) !important;
+  border-color: #2d2d2d !important;
+  color: #e8e8e8;
+  box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Dark mode for CoreUI components */
+/* Reference: CoreUI React Components — https://coreui.io/react/docs/components/ */
+/* Used CoreUI component structure and enhanced with dark mode styling. */
+body.dark-mode .card-header,
+body.dark-mode .card-body {
+  background: linear-gradient(145deg, #1f1f1f 0%, #1a1a1a 100%);
+  color: #e8e8e8;
+  border-color: #2d2d2d;
+}
+
+body.dark-mode .card-title {
+  color: #ffffff !important;
+}
+
+/* Dark mode for CoreUI CCard components specifically */
+body.dark-mode [class*="card"],
+body.dark-mode .card {
+  background: linear-gradient(145deg, #1f1f1f 0%, #1a1a1a 100%) !important;
+  color: #e8e8e8 !important;
+  border-color: #2d2d2d !important;
+}
+
+/* Dark mode for stats and numbers in dashboard */
+body.dark-mode .fs-4,
+body.dark-mode .fs-1,
+body.dark-mode .fs-2,
+body.dark-mode .fs-3,
+body.dark-mode .fs-5,
+body.dark-mode .fs-6 {
+  color: #ffffff !important;
+}
+
+body.dark-mode .fw-bold,
+body.dark-mode strong {
+  color: #ffffff !important;
+  font-weight: 700;
+}
+
+/* Dark mode for dashboard stat labels */
+body.dark-mode .text-muted.small,
+body.dark-mode small.text-muted {
+  color: #b0b0b0 !important;
+  font-weight: 500;
+}
+
+/* Dark mode for statistics section borders and text */
+body.dark-mode .border-bottom {
+  border-color: #3a3a3a !important;
+}
+
+body.dark-mode .d-flex.justify-content-between span {
+  color: #e0e0e0 !important;
+}
+
+body.dark-mode .d-flex.justify-content-between strong {
+  color: #ffffff !important;
+  font-weight: 600;
+}
+
+/* Dark mode for icons in dashboard */
+body.dark-mode .bi {
+  color: inherit;
+}
+
+body.dark-mode .text-primary {
+  color: #60a5fa !important;
+}
+
+body.dark-mode .text-success {
+  color: #34d399 !important;
+}
+
+body.dark-mode .text-info {
+  color: #22d3ee !important;
+}
+
+body.dark-mode .text-warning {
+  color: #fbbf24 !important;
+}
+
+body.dark-mode .text-danger {
+  color: #f87171 !important;
+}
+
+/* Dark mode for links in tables and content */
+body.dark-mode a {
+  color: #60a5fa !important;
+  transition: color 0.2s ease;
+}
+
+body.dark-mode a:hover {
+  color: #93c5fd !important;
+  text-decoration: underline;
+}
+
+body.dark-mode a.text-decoration-none {
+  color: #60a5fa !important;
+}
+
+body.dark-mode a.text-decoration-none:hover {
+  color: #93c5fd !important;
+}
+
+/* Dark mode for badges with text-dark - make them readable */
+body.dark-mode .badge.text-dark,
+body.dark-mode .badge.bg-info.text-dark {
+  color: #ffffff !important;
+  background-color: #06b6d4 !important;
+}
+
+body.dark-mode .badge.bg-secondary {
+  background-color: #64748b !important;
+  color: #ffffff !important;
+}
+
+body.dark-mode .badge.bg-success {
+  background-color: #10b981 !important;
+  color: #ffffff !important;
+}
+
+body.dark-mode .badge.bg-danger {
+  background-color: #ef4444 !important;
+  color: #ffffff !important;
+}
+
+body.dark-mode .badge.bg-primary {
+  background-color: #3b82f6 !important;
+  color: #ffffff !important;
+}
+
+body.dark-mode .badge.bg-warning {
+  background-color: #f59e0b !important;
+  color: #ffffff !important;
+}
+
+/* Dark mode for table links and content */
+body.dark-mode .table a {
+  color: #60a5fa !important;
+}
+
+body.dark-mode .table a:hover {
+  color: #93c5fd !important;
+}
+
+/* Dark mode for emphasized text */
+body.dark-mode em {
+  color: #b0b0b0 !important;
+  font-style: italic;
+}
+
+/* Dark mode for h5 headings in cards */
+body.dark-mode .card h5,
+body.dark-mode h5 {
+  color: #ffffff !important;
+}
+
+/* Dark mode for spinner and loading states */
+body.dark-mode .spinner-border {
+  border-color: #3b82f6;
+  border-right-color: transparent;
+}
+
+body.dark-mode .spinner-border.text-primary {
+  border-color: #3b82f6;
+  border-right-color: transparent;
+}
+
+/* Dark mode for visually hidden text */
+body.dark-mode .visually-hidden {
+  color: transparent;
+}
+
+/* Dark mode for empty state messages */
+body.dark-mode .text-center.py-5 h5 {
+  color: #ffffff !important;
+}
+
+body.dark-mode .text-center.py-5 p.text-muted {
+  color: #b0b0b0 !important;
+}
+
+/* Dark mode for CoreUI specific classes */
+body.dark-mode [class*="card-body"],
+body.dark-mode [class*="card-header"],
+body.dark-mode [class*="card-title"] {
+  color: #e8e8e8 !important;
+}
+
+/* Dark mode for all text in dashboard cards */
+body.dark-mode .card p,
+body.dark-mode .card div,
+body.dark-mode .card span:not(.badge):not(.bi) {
+  color: #e0e0e0 !important;
+}
+
+/* Dark mode for specific dashboard elements */
+body.dark-mode .d-grid.gap-2 button {
+  color: #ffffff;
+}
+
+/* Ensure all numbers and stats are visible */
+body.dark-mode .fs-4.fw-bold,
+body.dark-mode div.fs-4 {
+  color: #ffffff !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* Dark mode for table hover states */
+body.dark-mode .table-hover tbody tr:hover {
+  background-color: #252525 !important;
+}
+
+body.dark-mode .table-hover tbody tr:hover td {
+  color: #ffffff !important;
+}
+
+body.dark-mode .table-hover tbody tr:hover strong {
+  color: #ffffff !important;
+}
+
+body.dark-mode .table-hover tbody tr:hover a {
+  color: #93c5fd !important;
+}
+
+/* Dark mode for platform report and detailed sections */
+body.dark-mode .d-flex.justify-content-between.align-items-start h1 {
+  color: #ffffff !important;
+}
+
+body.dark-mode .d-flex.justify-content-between.align-items-start p.text-muted {
+  color: #b0b0b0 !important;
+}
+
+/* Dark mode for loading messages */
+body.dark-mode .text-center.py-5 p.text-muted {
+  color: #b0b0b0 !important;
+}
+
+/* Dark mode for alert content */
+body.dark-mode .alert.d-flex.align-items-center {
+  color: #e8e8e8 !important;
+}
+
+body.dark-mode .alert.d-flex.align-items-center span {
+  color: #e8e8e8 !important;
+}
+
+/* Dark mode for all small text elements */
+body.dark-mode small {
+  color: #b0b0b0 !important;
+}
+
+body.dark-mode small.text-muted {
+  color: #a0a0a0 !important;
+}
+
+/* Dark mode for gap-2 button containers */
+body.dark-mode .d-flex.gap-2 button {
+  color: #ffffff;
+}
+
+body.dark-mode .d-flex.gap-2.justify-content-center button {
+  color: #ffffff;
+}
+
+/* Dark mode for icons with inline styles - override them */
+body.dark-mode [style*="color: #64748b"],
+body.dark-mode [style*="color:#64748b"] {
+  color: #94a3b8 !important;
+}
+
+/* Dark mode for text-center elements */
+body.dark-mode .text-center {
+  color: #e8e8e8;
+}
+
+/* Dark mode for all paragraph text in cards */
+body.dark-mode .card p:not(.text-muted) {
+  color: #e0e0e0 !important;
+}
+
+/* Dark mode for ms-2 and me-2 spacing classes with badges */
+body.dark-mode .badge.ms-2 {
+  color: #ffffff !important;
+}
+
+/* Dark mode for protected/admin text */
+body.dark-mode .text-muted.small {
+  color: #a0a0a0 !important;
+}
+
+/* Ensure all table content is readable */
+body.dark-mode .table td strong {
+  color: #ffffff !important;
+  font-weight: 600;
+}
+
+body.dark-mode .table td {
+  color: #e0e0e0 !important;
+}
+
+/* Dark mode for outline buttons */
+body.dark-mode .btn-outline-secondary {
+  border-color: #64748b;
+  color: #94a3b8;
+}
+
+body.dark-mode .btn-outline-secondary:hover {
+  background-color: #64748b;
+  border-color: #64748b;
+  color: #ffffff;
+}
+
+body.dark-mode .btn-outline-secondary:disabled {
+  border-color: #3a3a3a;
+  color: #5a5a5a;
+  opacity: 0.5;
+}
+
+/* Dark mode for all text elements */
+body.dark-mode p,
+body.dark-mode span,
+body.dark-mode div,
+body.dark-mode label,
+body.dark-mode small {
+  color: #e0e0e0 !important;
+}
+
+body.dark-mode .text-muted {
+  color: #a0a0a0 !important;
+}
+
+/* Dark mode for CoreUI sidebar and header */
+/* Reference: CoreUI Free React Admin Template — https://github.com/coreui/coreui-free-react-admin-template */
+/* Used CoreUI's sidebar and header structure, enhanced with dark mode gradients and shadows. */
+body.dark-mode .sidebar,
+body.dark-mode [class*="sidebar"] {
+  background: linear-gradient(180deg, #1a1a1a 0%, #151515 100%) !important;
+  color: #e8e8e8;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.3);
+}
+
+body.dark-mode .header,
+body.dark-mode [class*="header"] {
+  background: linear-gradient(180deg, #1a1a1a 0%, #151515 100%) !important;
+  color: #e8e8e8;
+  border-color: #2d2d2d;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Ensure all headings in cards and containers are visible */
+/* Enhanced with subtle text shadows for better readability in dark mode */
+body.dark-mode .card h1,
+body.dark-mode .card h2,
+body.dark-mode .card h3,
+body.dark-mode .card h4,
+body.dark-mode .card h5,
+body.dark-mode .card h6,
+body.dark-mode .container h1,
+body.dark-mode .container h2,
+body.dark-mode .container h3,
+body.dark-mode .container h4,
+body.dark-mode .container h5,
+body.dark-mode .container h6 {
+  color: #ffffff !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* Enhanced button styles for dark mode */
+/* Reference: Bootstrap 5.3 Buttons — https://getbootstrap.com/docs/5.3/components/buttons/ */
+body.dark-mode .btn-primary {
+  background: linear-gradient(145deg, #3b82f6 0%, #2563eb 100%);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+  border-color: #3b82f6;
+}
+
+body.dark-mode .btn-primary:hover {
+  background: linear-gradient(145deg, #2563eb 0%, #1d4ed8 100%);
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.5);
+  transform: translateY(-1px);
+}
+
+body.dark-mode .btn-outline-primary {
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+body.dark-mode .btn-outline-primary:hover {
+  background: linear-gradient(145deg, #3b82f6 0%, #2563eb 100%);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+body.dark-mode .btn-outline-danger {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+body.dark-mode .btn-outline-danger:hover {
+  background: linear-gradient(145deg, #ef4444 0%, #dc2626 100%);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+}
+
+/* Enhanced badge styles */
+body.dark-mode .badge {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Override Bootstrap background utility classes in dark mode */
+body.dark-mode .bg-light,
+body.dark-mode .bg-white {
+  background-color: #1a1a1a !important;
+}
+
+body.dark-mode .bg-body,
+body.dark-mode .bg-body-tertiary,
+body.dark-mode .bg-body-secondary {
+  background-color: #141414 !important;
+}
+
+/* Fix Bootstrap table cell backgrounds — Bootstrap 5 sets background on individual cells */
+body.dark-mode .table > tbody > tr > td,
+body.dark-mode .table > tbody > tr > th {
+  background-color: #1e1e1e !important;
+  color: #e0e0e0 !important;
+}
+
+body.dark-mode .table > thead > tr > th {
+  background-color: #252525 !important;
+  color: #ffffff !important;
+}
+
+body.dark-mode .table-striped > tbody > tr:nth-of-type(odd) > * {
+  background-color: #232323 !important;
+}
+
+body.dark-mode .table-hover > tbody > tr:hover > * {
+  background-color: #2a2a2a !important;
+}
+
+/* CoreUI main content wrapper */
+body.dark-mode .wrapper,
+body.dark-mode .body,
+body.dark-mode [class*="wrapper"] {
+  background-color: #0f0f0f !important;
+}
+
+/* Light borders in dark mode — makes boxes distinguishable */
+body.dark-mode .card,
+body.dark-mode .modal-content,
+body.dark-mode [class*="card"] {
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+
+body.dark-mode .card-header,
+body.dark-mode [class*="card-header"] {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+body.dark-mode .card-footer,
+body.dark-mode [class*="card-footer"] {
+  border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+body.dark-mode .list-group-item {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+body.dark-mode .table {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+body.dark-mode .table > tbody > tr > td,
+body.dark-mode .table > tbody > tr > th,
+body.dark-mode .table > thead > tr > th {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+body.dark-mode .modal-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+body.dark-mode .modal-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+body.dark-mode .form-control,
+body.dark-mode .form-select {
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+body.dark-mode .form-control:focus,
+body.dark-mode .form-select:focus {
+  border-color: #3b82f6 !important;
+}
+
+body.dark-mode .navbar {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+body.dark-mode footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+body.dark-mode .border,
+body.dark-mode .border-top,
+body.dark-mode .border-bottom,
+body.dark-mode .border-start,
+body.dark-mode .border-end {
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* Iteration 5 - Dark mode pagination */
+body.dark-mode .pagination .page-link {
+  background-color: #1e1e1e;
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #e0e0e0;
+}
+
+body.dark-mode .pagination .page-item.active .page-link {
+  background-color: #3b82f6;
+  border-color: #3b82f6;
+  color: #ffffff;
+}
+
+body.dark-mode .pagination .page-item.disabled .page-link {
+  background-color: #1a1a1a;
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #555555;
+}
+
+body.dark-mode .pagination .page-link:hover {
+  background-color: #2a2a2a;
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}

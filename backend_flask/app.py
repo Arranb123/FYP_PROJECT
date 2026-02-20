@@ -11,6 +11,7 @@ from flask_cors import CORS  #import and flask setup   # https://flask-cors.read
 from datetime import datetime, timedelta
 from pathlib import Path
 import os
+import re
 
 # Iteration 2 - Database path handling for corruption recovery
 # Get the directory where this Python file is located
@@ -28,7 +29,7 @@ UPLOADS_DIR.mkdir(exist_ok=True)  # Create uploads directory if it doesn't exist
 app = Flask(__name__)
 # Enhanced CORS configuration to handle all requests properly
 CORS(app, resources={
-    r"/api/*": {
+    r"/*": {
         "origins": "*",
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
@@ -137,7 +138,14 @@ def init_database(retry_on_corruption=True):
         except sqlite3.OperationalError:
             # If I get an error, it means the column already exists, so I just ignore it
             pass  # Column already exists
-        
+
+        # Iteration 5 - Add modules column to students table so learners can store what they study
+        try:
+            cursor.execute("ALTER TABLE students ADD COLUMN modules TEXT DEFAULT ''")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         # Create the tutors table if it doesn't already exist
         # This table stores information about tutors who offer tutoring services
         cursor.execute("""
@@ -344,11 +352,34 @@ def get_students():
     students = conn.execute("SELECT * FROM students").fetchall()
     conn.close()
     student_list = [
-        {"id": s["id"], "first_name": s["first_name"], "last_name": s["last_name"], "college_email": s["college_email"]} #loops through student records and converts to dict then returns as json
+        {"id": s["id"], "first_name": s["first_name"], "last_name": s["last_name"], "college_email": s["college_email"], "modules": s["modules"] or ""} #loops through student records and converts to dict then returns as json
         #and displays
         for s in students
     ]
     return jsonify(student_list)
+
+
+# Iteration 5 - Get a single student by ID (used by LearnerProfileEdit)
+@app.route('/students/<int:id>', methods=['GET'])
+def get_student(id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM students WHERE id = ?", (id,))
+    student = cursor.fetchone()
+    conn.close()
+
+    if not student:
+        return jsonify({"error": "Student not found"}), 404
+
+    return jsonify({
+        "id": student["id"],
+        "first_name": student["first_name"],
+        "last_name": student["last_name"],
+        "college_email": student["college_email"],
+        "modules": student["modules"] or "",
+        "created_at": student["created_at"],
+        "updated_at": student["updated_at"]
+    }), 200
 
 
 ###https://www.youtube.com/watch?v=KO0FufpqC7c#### - Video used to help create route
@@ -384,14 +415,25 @@ def update_student(id):#defines the function
     first_name = data.get('first_name')
     last_name = data.get('last_name')
     college_email = data.get('college_email')
+    # Iteration 5 - Accept modules field for learner profile editing
+    modules = data.get('modules', '')
+
+    # Iteration 5 - Validate module codes (2 letters + 4 digits, e.g. IS5543)
+    import re
+    if modules.strip():
+        module_pattern = re.compile(r'^[A-Za-z]{2}\d{4}$')
+        module_list = [m.strip() for m in modules.split(',') if m.strip()]
+        invalid = [m for m in module_list if not module_pattern.match(m)]
+        if invalid:
+            return jsonify({"error": f"Invalid module code(s): {', '.join(invalid)}. Format must be 2 letters followed by 4 numbers (e.g. IS5543)."}), 400
 
     conn = get_db_connection() #opens a connection to db
     # Iteration 2 - Added updated_at timestamp and error handling
     # updated_at timestamp shows when student info was last modified - useful for tracking changes
     cursor = conn.cursor()
     cursor.execute(
-        "UPDATE students SET first_name=?, last_name=?, college_email=?, updated_at=? WHERE id=?",
-        (first_name, last_name, college_email, datetime.now(), id)#gives the actual values to update it - updated_at set to current time
+        "UPDATE students SET first_name=?, last_name=?, college_email=?, modules=?, updated_at=? WHERE id=?",
+        (first_name, last_name, college_email, modules, datetime.now(), id)#gives the actual values to update it - updated_at set to current time
     )
     # Iteration 2 - Check if student exists
     if cursor.rowcount == 0:
@@ -511,6 +553,13 @@ def add_tutor():
     if not all([first_name, last_name, college_email, modules, hourly_rate]):
         return jsonify({"error": "Missing required fields"}), 400
 
+    # Iteration 5 - Validate module code format (2 letters + 4 digits, e.g. IS5543)
+    module_pattern = re.compile(r'^[A-Za-z]{2}\d{4}$')
+    module_list = [m.strip() for m in modules.split(',') if m.strip()]
+    invalid_modules = [m for m in module_list if not module_pattern.match(m)]
+    if invalid_modules:
+        return jsonify({"error": f"Invalid module code(s): {', '.join(invalid_modules)}. Format must be 2 letters followed by 4 numbers (e.g. IS5543)."}), 400
+
     conn = None
     try:
         conn = get_db_connection()
@@ -555,7 +604,6 @@ def add_tutor():
     except sqlite3.Error as e:
         if conn:
             conn.rollback()
-        print(f"[ERROR] Database error: {e}")  # Debug log
         return jsonify({"error": f"Database error: {str(e)}"}), 500
     except Exception as e:
         if conn:
@@ -919,9 +967,6 @@ def create_booking():
     except Exception as e:
         if conn:
             conn.close()
-        print(f"[ERROR] Unexpected error in create_booking: {e}")
-        import traceback
-        traceback.print_exc()
         return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
 
 
@@ -989,7 +1034,6 @@ def get_tutor_bookings(tutor_id):
                     
                     # If session end time has passed, mark as completed
                     if now > session_end:
-                        print(f"[INFO] Auto-completing booking {booking['booking_id']}: session ended at {session_end}, current time {now}")
                         cursor.execute("""
                             UPDATE bookings 
                             SET status = 'completed', updated_at = ? 
@@ -997,9 +1041,7 @@ def get_tutor_bookings(tutor_id):
                         """, (now, booking["booking_id"]))
                         conn.commit()
                 except Exception as e:
-                    print(f"[WARNING] Error auto-completing booking {booking['booking_id']}: {e}")
-                    import traceback
-                    traceback.print_exc()
+                    pass
     
     # Re-fetch bookings to get updated statuses
     # Iteration 5 - Filter out cancelled bookings older than 24 hours
@@ -1108,7 +1150,6 @@ def get_learner_bookings(learner_id):
                     
                     # If session end time has passed, mark as completed
                     if now > session_end:
-                        print(f"[INFO] Auto-completing booking {booking['booking_id']}: session ended at {session_end}, current time {now}")
                         cursor.execute("""
                             UPDATE bookings 
                             SET status = 'completed', updated_at = ? 
@@ -1116,9 +1157,7 @@ def get_learner_bookings(learner_id):
                         """, (now, booking["booking_id"]))
                         conn.commit()
                 except Exception as e:
-                    print(f"[WARNING] Error auto-completing booking {booking['booking_id']}: {e}")
-                    import traceback
-                    traceback.print_exc()
+                    pass
     
     # Re-fetch bookings to get updated statuses
     # Iteration 5 - Filter out cancelled bookings older than 24 hours
@@ -1328,7 +1367,6 @@ def get_all_bookings():
         # Auto-complete bookings where session time has passed
         now = datetime.now()
         completed_count = 0
-        print(f"[DEBUG] Admin bookings: Checking {len(bookings)} bookings for auto-completion. Current time: {now}")
         for booking in bookings:
             if booking["status"] in ["pending", "confirmed"]:
                 # Check if session time has passed
@@ -1374,11 +1412,8 @@ def get_all_bookings():
                         duration_minutes = booking["duration"] if booking["duration"] is not None else 60
                         session_end = session_datetime + timedelta(minutes=duration_minutes)
                         
-                        # Debug: Print booking info for first few bookings
-                        
                         # If session end time has passed, mark as completed
                         if now > session_end:
-                            print(f"[INFO] Auto-completing booking {booking['booking_id']}: session ended at {session_end}, current time {now}")
                             cursor.execute("""
                                 UPDATE bookings 
                                 SET status = 'completed', updated_at = ? 
@@ -1386,14 +1421,8 @@ def get_all_bookings():
                             """, (now, booking["booking_id"]))
                             conn.commit()
                             completed_count += 1
-                            print(f"[SUCCESS] Booking {booking['booking_id']} marked as completed")
                     except Exception as e:
-                        print(f"[WARNING] Error auto-completing booking {booking['booking_id']}: {e}")
-                        import traceback
-                        traceback.print_exc()
-        
-        if completed_count > 0:
-            print(f"[INFO] Admin bookings: Auto-completed {completed_count} booking(s)")
+                        pass
         # Re-fetch bookings to get updated statuses
         # Iteration 5 - Filter out cancelled bookings older than 24 hours
         twenty_four_hours_ago = now - timedelta(hours=24)
@@ -1565,9 +1594,19 @@ def generate_platform_report():
         }
         
         # Tutor Statistics
-        cursor.execute("SELECT AVG(rating) as avg_rating FROM tutors WHERE rating > 0")
+        # Calculate average rating from reviews (more accurate than tutors table)
+        cursor.execute("SELECT AVG(rating) as avg_rating FROM reviews")
         avg_rating_result = cursor.fetchone()
         avg_rating = round(avg_rating_result["avg_rating"], 2) if avg_rating_result["avg_rating"] else 0
+        
+        # Also get average from tutors table for tutor-specific stats
+        cursor.execute("SELECT AVG(rating) as avg_tutor_rating FROM tutors WHERE rating > 0")
+        avg_tutor_rating_result = cursor.fetchone()
+        avg_tutor_rating = round(avg_tutor_rating_result["avg_tutor_rating"], 2) if avg_tutor_rating_result["avg_tutor_rating"] else 0
+        
+        # Use reviews average if available, otherwise use tutors average
+        if avg_rating == 0 and avg_tutor_rating > 0:
+            avg_rating = avg_tutor_rating
         
         cursor.execute("SELECT AVG(hourly_rate) as avg_rate FROM tutors WHERE verified = 1")
         avg_rate_result = cursor.fetchone()
@@ -1636,9 +1675,11 @@ def generate_platform_report():
         cursor.execute("SELECT COUNT(*) as count FROM reviews")
         total_reviews = cursor.fetchone()["count"]
         
-        cursor.execute("SELECT AVG(rating) as avg_rating FROM reviews")
+        # Calculate average rating from reviews - use COALESCE to handle NULL when no reviews exist
+        cursor.execute("SELECT COALESCE(AVG(CAST(rating AS REAL)), 0) as avg_rating FROM reviews")
         avg_review_rating_result = cursor.fetchone()
-        avg_review_rating = round(avg_review_rating_result["avg_rating"], 2) if avg_review_rating_result["avg_rating"] else 0
+        avg_review_rating_value = avg_review_rating_result["avg_rating"] if avg_review_rating_result["avg_rating"] is not None else 0
+        avg_review_rating = round(float(avg_review_rating_value), 2) if avg_review_rating_value else 0
         
         cursor.execute("""
             SELECT rating, COUNT(*) as count 
@@ -1688,14 +1729,47 @@ def generate_platform_report():
         completion_rate = (completed_bookings / total_bookings * 100) if total_bookings > 0 else 0
         cancellation_rate = ((cancelled_bookings + denied_bookings) / total_bookings * 100) if total_bookings > 0 else 0
         
+        # Calculate active bookings (confirmed or accepted bookings that haven't happened yet)
+        cursor.execute("""
+            SELECT COUNT(*) as count FROM bookings 
+            WHERE status IN ('confirmed', 'accepted', 'pending')
+            AND session_date >= date('now')
+        """)
+        active_bookings = cursor.fetchone()["count"]
+        
+        # Calculate total revenue (sum of all completed bookings)
+        cursor.execute("""
+            SELECT COALESCE(SUM(CAST(duration AS REAL) * (SELECT hourly_rate FROM tutors WHERE tutor_id = bookings.tutor_id) / 60), 0) as revenue
+            FROM bookings 
+            WHERE status = 'completed'
+        """)
+        revenue_result = cursor.fetchone()
+        total_revenue = round(revenue_result["revenue"] or 0, 2)
+        
+        # Use avg_review_rating from reviews section if available, otherwise use avg_rating from tutors section
+        # avg_review_rating is calculated from reviews table (more accurate)
+        # Check if we have reviews first, then use that average, otherwise fall back to tutors table average
+        if total_reviews > 0 and avg_review_rating and avg_review_rating > 0:
+            final_avg_rating = avg_review_rating
+        elif avg_rating and avg_rating > 0:
+            final_avg_rating = avg_rating
+        else:
+            final_avg_rating = 0
+        
+        # Ensure final_avg_rating is a number, not None
+        final_avg_rating = float(final_avg_rating) if final_avg_rating else 0.0
+        
         report["summary"] = {
             "total_users": report["users"]["total_users"],
             "total_bookings": total_bookings,
+            "total_verified_tutors": verified_tutor_count,
             "total_tutors": verified_tutor_count,
             "completion_rate_percent": round(completion_rate, 2),
             "cancellation_rate_percent": round(cancellation_rate, 2),
-            "average_tutor_rating": avg_rating,
-            "total_reviews": total_reviews
+            "average_tutor_rating": round(final_avg_rating, 2),
+            "total_reviews": total_reviews,
+            "total_revenue": total_revenue,
+            "active_bookings": active_bookings
         }
         
         conn.close()
@@ -1816,8 +1890,6 @@ def create_review():
     except Exception as e:
         if conn:
             conn.rollback()
-        import traceback
-        traceback.print_exc()  # Print full traceback for debugging
         return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
     finally:
         if conn:
@@ -1926,9 +1998,75 @@ def get_all_users():
     except Exception as e:
         if conn:
             conn.close()
-        print(f"[ERROR] Unexpected error in get_all_users: {e}")
-        import traceback
-        traceback.print_exc()
+        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
+
+@app.route('/api/admin/change-password', methods=['PUT'])
+def change_admin_password():
+    """
+    Allows admin to change their password.
+    Requires current password verification.
+    """
+    conn = None
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        current_password = data.get('current_password')
+        new_password = data.get('new_password')
+        
+        # Validate required fields
+        if not email or not current_password or not new_password:
+            return jsonify({"error": "Missing required fields: email, current_password, and new_password"}), 400
+        
+        # Validate new password length
+        if len(new_password) < 6:
+            return jsonify({"error": "New password must be at least 6 characters long"}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Find user by email
+        cursor.execute("SELECT * FROM users WHERE LOWER(email) = LOWER(?) AND role = 'admin'", (email,))
+        user = cursor.fetchone()
+        
+        if not user:
+            conn.close()
+            return jsonify({"error": "Admin user not found"}), 404
+        
+        # Verify current password
+        import hashlib
+        current_password_hash = hashlib.sha256(current_password.encode()).hexdigest()
+        
+        if user["password"] != current_password_hash:
+            conn.close()
+            return jsonify({"error": "Current password is incorrect"}), 401
+        
+        # Hash new password
+        new_password_hash = hashlib.sha256(new_password.encode()).hexdigest()
+        
+        # Update password
+        now = datetime.now()
+        cursor.execute("""
+            UPDATE users 
+            SET password = ?, updated_at = ?
+            WHERE user_id = ?
+        """, (new_password_hash, now, user["user_id"]))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            "message": "Password changed successfully",
+            "user_id": user["user_id"],
+            "email": user["email"]
+        }), 200
+    except sqlite3.Error as e:
+        if conn:
+            conn.rollback()
+            conn.close()
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+    except Exception as e:
+        if conn:
+            conn.rollback()
+            conn.close()
         return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
 
 @app.route('/api/admin/users/<int:user_id>/status', methods=['PUT'])
@@ -2299,7 +2437,14 @@ def update_tutor_profile(tutor_id):
     # Validate required fields
     if not modules or hourly_rate is None:
         return jsonify({"error": "Missing required fields: modules and hourly_rate"}), 400
-    
+
+    # Iteration 5 - Validate module code format (2 letters + 4 digits, e.g. IS5543)
+    module_pattern = re.compile(r'^[A-Za-z]{2}\d{4}$')
+    module_list = [m.strip() for m in modules.split(',') if m.strip()]
+    invalid_modules = [m for m in module_list if not module_pattern.match(m)]
+    if invalid_modules:
+        return jsonify({"error": f"Invalid module code(s): {', '.join(invalid_modules)}. Format must be 2 letters followed by 4 numbers (e.g. IS5543)."}), 400
+
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -2777,14 +2922,10 @@ def get_user_messages():
         user_id = request.args.get('user_id', type=int)
         user_role = request.args.get('user_role')
         
-        print(f"[INFO] get_user_messages called with user_id={user_id}, user_role={user_role}")
-        
         if not user_id or not user_role:
-            print(f"[ERROR] Missing required parameters: user_id={user_id}, user_role={user_role}")
             return jsonify({"error": "Missing required query parameters: user_id and user_role"}), 400
         
         if user_role not in ['learner', 'tutor']:
-            print(f"[ERROR] Invalid user_role: {user_role}")
             return jsonify({"error": "user_role must be 'learner' or 'tutor'"}), 400
         
         conn = None
@@ -2888,17 +3029,10 @@ def get_user_messages():
         # Convert to list
         result = list(booking_groups.values())
         
-        print(f"[INFO] Returning {len(result)} message groups")
         return jsonify(result), 200
     except sqlite3.Error as e:
-        print(f"[ERROR] Database error in get_user_messages: {str(e)}")
-        import traceback
-        traceback.print_exc()
         return jsonify({"error": f"Database error: {str(e)}"}), 500
     except Exception as e:
-        print(f"[ERROR] Unexpected error in get_user_messages: {str(e)}")
-        import traceback
-        traceback.print_exc()
         return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
     finally:
         if conn:
@@ -2990,12 +3124,8 @@ def get_learner_earnings(learner_id):
         
         return jsonify(result), 200
     except sqlite3.Error as e:
-        print(f"[ERROR] Database error in get_learner_earnings: {str(e)}")
         return jsonify({"error": f"Database error: {str(e)}"}), 500
     except Exception as e:
-        print(f"[ERROR] Unexpected error in get_learner_earnings: {str(e)}")
-        import traceback
-        traceback.print_exc()
         return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
     finally:
         if conn:
@@ -3088,12 +3218,8 @@ def get_tutor_earnings(tutor_id):
         
         return jsonify(result), 200
     except sqlite3.Error as e:
-        print(f"[ERROR] Database error in get_tutor_earnings: {str(e)}")
         return jsonify({"error": f"Database error: {str(e)}"}), 500
     except Exception as e:
-        print(f"[ERROR] Unexpected error in get_tutor_earnings: {str(e)}")
-        import traceback
-        traceback.print_exc()
         return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
     finally:
         if conn:
@@ -3173,7 +3299,17 @@ def register_user():
     # Basic password validation (minimum 6 characters)
     if len(password) < 6:
         return jsonify({"error": "Password must be at least 6 characters long"}), 400
-    
+
+    # Iteration 5 - Validate learner module codes (2 letters + 4 digits, e.g. IS5543)
+    import re
+    modules_raw = data.get('modules', '')
+    if role == 'learner' and modules_raw.strip():
+        module_pattern = re.compile(r'^[A-Za-z]{2}\d{4}$')
+        module_list = [m.strip() for m in modules_raw.split(',') if m.strip()]
+        invalid = [m for m in module_list if not module_pattern.match(m)]
+        if invalid:
+            return jsonify({"error": f"Invalid module code(s): {', '.join(invalid)}. Format must be 2 letters followed by 4 numbers (e.g. IS5543)."}), 400
+
     conn = None
     try:
         conn = get_db_connection()
@@ -3186,16 +3322,21 @@ def register_user():
         password_hash = hashlib.sha256(password.encode()).hexdigest()
         
         # Story 11 - If registering as learner and no student_id provided, create a student record
+        # Iteration 5 - Also save the learner's modules and name during registration
+        modules = data.get('modules', '')
+        first_name = data.get('first_name', '').strip()
+        last_name = data.get('last_name', '').strip()
         created_student_id = student_id
         if role == 'learner' and not student_id:
-            # Extract name from email (before @) for initial student record
-            email_name = email.split('@')[0]
+            # Iteration 5 - Use provided first/last name, fallback to email prefix
+            if not first_name:
+                first_name = email.split('@')[0]
             # Create a student record for this learner
             now = datetime.now()
             cursor.execute("""
-                INSERT INTO students (first_name, last_name, college_email, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?)
-            """, (email_name, "", email, now, now))
+                INSERT INTO students (first_name, last_name, college_email, modules, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (first_name, last_name, email, modules, now, now))
             created_student_id = cursor.lastrowid
         
         # Story 11 - Note: Tutors need to complete tutor signup separately to get tutor_id
@@ -3284,15 +3425,16 @@ def login_user():
             return jsonify({"error": "Invalid email or password"}), 401
         
         # Story 11 - If learner doesn't have student_id, create one automatically
+        # Iteration 5 - includes modules column
         student_id = user["student_id"]
         if user["role"] == 'learner' and not student_id:
             # Create a student record for this learner
             email_name = user["email"].split('@')[0]
             now = datetime.now()
             cursor.execute("""
-                INSERT INTO students (first_name, last_name, college_email, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?)
-            """, (email_name, "", user["email"], now, now))
+                INSERT INTO students (first_name, last_name, college_email, modules, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (email_name, "", user["email"], "", now, now))
             student_id = cursor.lastrowid
             # Update user record with student_id
             cursor.execute("""
@@ -3315,9 +3457,7 @@ def login_user():
                     UPDATE users SET tutor_id = ?, updated_at = ? WHERE user_id = ?
                 """, (tutor_id, now, user["user_id"]))
                 conn.commit()
-                print(f"[SUCCESS] Auto-linked tutor record {tutor_id} to user {user['user_id']} on login (email: {user['email']})")  # Debug log
             else:
-                # Debug: Show what tutor records exist
                 cursor.execute("SELECT tutor_id, college_email FROM tutors")
                 all_tutors = cursor.fetchall()
         

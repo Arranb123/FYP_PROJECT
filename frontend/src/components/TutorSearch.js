@@ -1,15 +1,19 @@
 // StudyHive Frontend – Iteration 1
 // Tutor Search Component
 // Author: Arran Ethan Bearman
-//reference ,mdn resource for develpers (2025) https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch used throughout majority of file to assist with 
+//reference ,mdn resource for develpers (2025) https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch used throughout majority of file to assist with
 //understanding how to make HTTP requests (GET, POST, PUT, DELETE) to the Flask backend, handle JSON responses, and update React state based on returned data.
+//
+// Pagination
+// Reference: Bootstrap 5.3 Documentation (2025) "Pagination" — https://getbootstrap.com/docs/5.3/components/pagination/
+// Used to split tutor search results across multiple pages (10 items per page).
 // Reference (React Hooks):
 // React Docs (2025) "useState Hook" — https://react.dev/reference/react/useState
 // Used for managing component level state for search input and API results.
 // Reference (Axios HTTP Library):
 // Axios Docs (2025) "Making Requests" — https://axios-http.com/docs/intro
 // Used to call Flask API endpoints for fetching verified tutors.
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import axios from "axios";
 // Iteration 2 additions
 import BookingForm from "./BookingForm";
@@ -41,6 +45,36 @@ const TutorSearch = ({ learnerId }) => {
   });
   const [showFilters, setShowFilters] = useState(false);
 
+  // Iteration 5 - Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
+
+  // Reset to page 1 whenever search results change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [tutors]);
+
+  // Iteration 5 - Learner's own modules for quick-filter buttons
+  const [learnerModules, setLearnerModules] = useState([]);
+
+  // Iteration 5 - Fetch learner's modules on mount for quick-filter buttons
+  useEffect(() => {
+    if (!learnerId) return;
+    const fetchLearnerModules = async () => {
+      try {
+        const res = await axios.get(`http://127.0.0.1:5000/students/${learnerId}`);
+        const modulesStr = res.data.modules || "";
+        if (modulesStr.trim()) {
+          const parsed = modulesStr.split(',').map(m => m.trim()).filter(m => m.length > 0);
+          setLearnerModules(parsed);
+        }
+      } catch (err) {
+        console.error("Error fetching learner modules:", err);
+      }
+    };
+    fetchLearnerModules();
+  }, [learnerId]);
+
   // Iteration 3 - Removed learner dropdown, uses learnerId from props
   const [selectedTutor, setSelectedTutor] = useState(null);
   const [showBookingForm, setShowBookingForm] = useState(false);
@@ -66,12 +100,16 @@ const TutorSearch = ({ learnerId }) => {
     });
   };
 
-  const handleSearch = async (e) => {
+  // Iteration 5 - Added optional searchTerm parameter for quick-filter buttons
+  const handleSearch = async (e, searchTerm) => {
     // Iteration 4 - Allow form submission via Enter key
     if (e) e.preventDefault();
-    
+
+    // Use explicit searchTerm if provided (from quick-filter), otherwise use module state
+    const searchModule = searchTerm || module;
+
     //validation ensure user has typed something
-    if (!module.trim()) {
+    if (!searchModule.trim()) {
       setError("Please enter a module name to search");  //this part checks if a user enters a module and if not gives an error
       if (window.showToast) {
         window.showToast("Please enter a module name to search", "warning", 3000);
@@ -83,7 +121,7 @@ const TutorSearch = ({ learnerId }) => {
     setError("");
     try {  //this calls the flask route . then it returns all verified tutors
       // Iteration 4 - Build query string with filters
-      let queryParams = `module=${encodeURIComponent(module)}`;
+      let queryParams = `module=${encodeURIComponent(searchModule)}`;
       
       if (filters.minPrice) {
         queryParams += `&min_price=${filters.minPrice}`;
@@ -192,6 +230,31 @@ const TutorSearch = ({ learnerId }) => {
               </button>
             </div>
           </div>
+
+          {/* Iteration 5 - Quick-filter buttons from learner's own modules */}
+          {learnerModules.length > 0 && (
+            <div className="mb-3">
+              <small className="text-muted d-block mb-2">
+                <i className="bi bi-bookmark-star me-1"></i>My Modules:
+              </small>
+              <div className="d-flex flex-wrap gap-2">
+                {learnerModules.map((mod, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    className={`btn btn-sm ${module === mod ? 'btn-primary' : 'btn-outline-primary'}`}
+                    onClick={() => {
+                      setModule(mod);
+                      handleSearch(null, mod);
+                    }}
+                  >
+                    {mod}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <form onSubmit={(e) => handleSearch(e)}>
             <div className="input-group input-group-lg mb-3">
               <span className="input-group-text bg-white">
@@ -346,8 +409,9 @@ const TutorSearch = ({ learnerId }) => {
       )}
       
       {/* Iteration 2 - Enhanced tutor cards with Bootstrap grid */}
+      {/* Iteration 5 - Pagination slice */}
       <div className="row g-4">
-        {tutors.map((tutor) => (
+        {tutors.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((tutor) => (
           <div key={tutor.tutor_id} className="col-md-6 col-lg-4">
             <div 
               className="card h-100" 
@@ -440,6 +504,25 @@ const TutorSearch = ({ learnerId }) => {
           </div>
         ))}
       </div>
+
+      {/* Iteration 5 - Pagination controls */}
+      {Math.ceil(tutors.length / ITEMS_PER_PAGE) > 1 && (
+        <nav className="mt-4 d-flex justify-content-center">
+          <ul className="pagination">
+            <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
+              <button className="page-link" onClick={() => setCurrentPage(p => p - 1)}>Previous</button>
+            </li>
+            {Array.from({ length: Math.ceil(tutors.length / ITEMS_PER_PAGE) }, (_, i) => (
+              <li key={i + 1} className={`page-item ${currentPage === i + 1 ? 'active' : ''}`}>
+                <button className="page-link" onClick={() => setCurrentPage(i + 1)}>{i + 1}</button>
+              </li>
+            ))}
+            <li className={`page-item ${currentPage === Math.ceil(tutors.length / ITEMS_PER_PAGE) ? 'disabled' : ''}`}>
+              <button className="page-link" onClick={() => setCurrentPage(p => p + 1)}>Next</button>
+            </li>
+          </ul>
+        </nav>
+      )}
 
       {/* UX Improvement - Enhanced empty state */}
       {!loading && !error && tutors.length === 0 && module && (

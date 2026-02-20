@@ -1,5 +1,8 @@
 // Iteration 3 - Story 12: Review functionality references
 // file references: https://react.dev/reference/react/useState (lines 41-49, 52)
+// Pagination
+// Reference: Bootstrap 5.3 Documentation (2025) "Pagination" — https://getbootstrap.com/docs/5.3/components/pagination/
+// Used to split the bookings table across multiple pages (10 items per page).
 // file references: https://react.dev/reference/react/useCallback (line 124)
 // file references: https://react.dev/reference/react/useEffect (line 258)
 // file references: https://axios-http.com/docs/intro (lines 130, 162)
@@ -13,7 +16,7 @@ import React, { useEffect, useState, useCallback, useMemo } from "react";
 import axios from "axios";
 import BookingMessages from "./BookingMessages"; // Iteration 4 - Import messaging component
 
-const LearnerBookings = ({ learnerId }) => {
+const LearnerBookings = ({ learnerId, onNavigateToTutors }) => {
   
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -36,6 +39,10 @@ const LearnerBookings = ({ learnerId }) => {
   
   // Iteration 4 - State for showing messages
   const [showMessagesForBooking, setShowMessagesForBooking] = useState(null);
+
+  // Iteration 5 - Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
 
   // Story 10 - fetch bookings
   const fetchBookings = useCallback(async () => {
@@ -108,20 +115,14 @@ const LearnerBookings = ({ learnerId }) => {
   // file reference: https://axios-http.com/docs/intro (line 130)
   const checkExistingReviews = useCallback(async () => {
     if (!learnerId || bookings.length === 0) return;
-    
-    const reviewedSet = new Set();
-    for (const booking of bookings) {
-      try {
-        const res = await axios.get(`http://127.0.0.1:5000/api/reviews/booking/${booking.booking_id}`);
-        if (res.data.exists) {
-          reviewedSet.add(booking.booking_id);
-        }
-      } catch (err) {
-        // Ignore errors for individual review checks
-        console.error(`Error checking review for booking ${booking.booking_id}:`, err);
-      }
-    }
-    setReviewedBookings(reviewedSet);
+    const results = await Promise.all(
+      bookings.map(booking =>
+        axios.get(`http://127.0.0.1:5000/api/reviews/booking/${booking.booking_id}`)
+          .then(res => res.data.exists ? booking.booking_id : null)
+          .catch(() => null)
+      )
+    );
+    setReviewedBookings(new Set(results.filter(Boolean)));
   }, [bookings, learnerId]);
 
   // Story 12 - Opens the review form for a specific booking
@@ -400,12 +401,7 @@ const LearnerBookings = ({ learnerId }) => {
             </p>
             <button 
               className="btn btn-primary"
-              onClick={() => {
-                // Navigate to tutor search if available
-                if (window.location.pathname.includes('/tutors') === false) {
-                  window.dispatchEvent(new CustomEvent('navigate', { detail: 'tutors' }));
-                }
-              }}
+              onClick={() => onNavigateToTutors?.()}
             >
               <i className="bi bi-search me-2"></i>
               Search for Tutors
@@ -413,6 +409,7 @@ const LearnerBookings = ({ learnerId }) => {
           </div>
         ) : (
           /* Show table of bookings if there are any */
+          <>
           <div className="table-responsive">
             <table className="table table-hover mb-0">
               <thead>
@@ -428,7 +425,8 @@ const LearnerBookings = ({ learnerId }) => {
               </thead>
               <tbody>
                 {/* Loop through each booking and create a table row */}
-                {bookings.map((booking) => (
+                {/* Iteration 5 - Paginated slice */}
+                {bookings.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((booking) => (
                   <React.Fragment key={booking.booking_id}>
                     <tr>
                       {/* Format the date nicely (e.g., "Mon, Jan 15, 2024") */}
@@ -671,6 +669,26 @@ const LearnerBookings = ({ learnerId }) => {
               </tbody>
             </table>
           </div>
+
+          {/* Iteration 5 - Pagination controls */}
+          {Math.ceil(bookings.length / ITEMS_PER_PAGE) > 1 && (
+            <nav className="mt-3 d-flex justify-content-center">
+              <ul className="pagination">
+                <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
+                  <button className="page-link" onClick={() => setCurrentPage(p => p - 1)}>Previous</button>
+                </li>
+                {Array.from({ length: Math.ceil(bookings.length / ITEMS_PER_PAGE) }, (_, i) => (
+                  <li key={i + 1} className={`page-item ${currentPage === i + 1 ? 'active' : ''}`}>
+                    <button className="page-link" onClick={() => setCurrentPage(i + 1)}>{i + 1}</button>
+                  </li>
+                ))}
+                <li className={`page-item ${currentPage === Math.ceil(bookings.length / ITEMS_PER_PAGE) ? 'disabled' : ''}`}>
+                  <button className="page-link" onClick={() => setCurrentPage(p => p + 1)}>Next</button>
+                </li>
+              </ul>
+            </nav>
+          )}
+          </>
         )}
       </div>
       </div>

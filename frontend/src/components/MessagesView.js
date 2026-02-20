@@ -1,6 +1,10 @@
 // Iteration 4 - Messages View Component
 // This component displays all messages for a user (learner or tutor) across all bookings
 // ChatGPT conversation reference: https://chatgpt.com/share/6984af21-d9ac-8008-a016-f00a20286dd1
+//
+// Pagination
+// Reference: Bootstrap 5.3 Documentation (2025) "Pagination" — https://getbootstrap.com/docs/5.3/components/pagination/
+// Used to split the message conversation list across multiple pages (10 items per page).
 
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
@@ -12,6 +16,8 @@ const MessagesView = ({ userId, userRole }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [expandedBooking, setExpandedBooking] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
 
   // Iteration 4 - Fetch all messages for this user
   const fetchMessages = useCallback(async () => {
@@ -148,7 +154,7 @@ const MessagesView = ({ userId, userRole }) => {
         )}
 
         <div className="message-groups">
-          {messageGroups.map((group) => {
+          {messageGroups.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((group) => {
             const unreadCount = getUnreadCount(group.messages);
             const lastMessage = getLastMessage(group.messages);
             const isExpanded = expandedBooking === group.booking_id;
@@ -205,6 +211,24 @@ const MessagesView = ({ userId, userRole }) => {
             );
           })}
         </div>
+
+        {Math.ceil(messageGroups.length / ITEMS_PER_PAGE) > 1 && (
+          <nav className="mt-3 d-flex justify-content-center">
+            <ul className="pagination">
+              <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
+                <button className="page-link" onClick={() => setCurrentPage(p => p - 1)}>Previous</button>
+              </li>
+              {Array.from({ length: Math.ceil(messageGroups.length / ITEMS_PER_PAGE) }, (_, i) => (
+                <li key={i + 1} className={`page-item ${currentPage === i + 1 ? 'active' : ''}`}>
+                  <button className="page-link" onClick={() => setCurrentPage(i + 1)}>{i + 1}</button>
+                </li>
+              ))}
+              <li className={`page-item ${currentPage === Math.ceil(messageGroups.length / ITEMS_PER_PAGE) ? 'disabled' : ''}`}>
+                <button className="page-link" onClick={() => setCurrentPage(p => p + 1)}>Next</button>
+              </li>
+            </ul>
+          </nav>
+        )}
       </div>
     </div>
   );
