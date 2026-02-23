@@ -20,7 +20,18 @@ DATABASE_URL = os.environ.get('DATABASE_URL')
 UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
+from flask.json.provider import DefaultJSONProvider
+from datetime import date, time as time_type
+
+class CustomJSONProvider(DefaultJSONProvider):
+    def default(self, obj):
+        if isinstance(obj, (date, time_type)):
+            return obj.isoformat()
+        return super().default(obj)
+
 app = Flask(__name__)
+app.json_provider_class = CustomJSONProvider
+app.json = CustomJSONProvider(app)
 # Enhanced CORS configuration to handle all requests properly
 CORS(app, resources={
     r"/*": {
