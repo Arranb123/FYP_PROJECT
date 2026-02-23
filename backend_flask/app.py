@@ -2479,17 +2479,25 @@ def get_available_slots(tutor_id):
         if not availability:
             return jsonify({"available_slots": [], "message": "Tutor not available on this day"}), 200
         
-        start_time_str = availability["start_time"]
-        end_time_str = availability["end_time"]
-        
-        # Iteration 4 - Parse times (handle both HH:MM and HH:MM:SS formats)
-        # Split and take only first 2 parts (hour and minute), ignore seconds if present
-        # ref: Python string split - https://www.w3schools.com/python/ref_string_split.asp
-        # ref: Python datetime parsing - https://docs.python.org/3/library/datetime.html#strftime-strptime-behavior
-        start_parts = start_time_str.split(':')
-        end_parts = end_time_str.split(':')
-        start_hour, start_min = int(start_parts[0]), int(start_parts[1])
-        end_hour, end_min = int(end_parts[0]), int(end_parts[1])
+        start_time_val = availability["start_time"]
+        end_time_val = availability["end_time"]
+
+        # PostgreSQL returns TIME columns as datetime.time objects
+        if isinstance(start_time_val, time_type):
+            start_hour, start_min = start_time_val.hour, start_time_val.minute
+            start_time_str = start_time_val.isoformat()
+        else:
+            start_parts = str(start_time_val).split(':')
+            start_hour, start_min = int(start_parts[0]), int(start_parts[1])
+            start_time_str = str(start_time_val)
+
+        if isinstance(end_time_val, time_type):
+            end_hour, end_min = end_time_val.hour, end_time_val.minute
+            end_time_str = end_time_val.isoformat()
+        else:
+            end_parts = str(end_time_val).split(':')
+            end_hour, end_min = int(end_parts[0]), int(end_parts[1])
+            end_time_str = str(end_time_val)
         
         # Get existing bookings for this date
         cursor.execute("""
@@ -2512,17 +2520,21 @@ def get_available_slots(tutor_id):
             # Check if this slot conflicts with existing bookings
             is_available = True
             for booking in existing_bookings:
-                booking_time_str = booking["session_time"]
-                if isinstance(booking_time_str, str):
-                    booking_hour, booking_min = map(int, booking_time_str.split(':')[:2])
-                    booking_datetime = datetime.strptime(f"{date_str} {booking_hour:02d}:{booking_min:02d}", "%Y-%m-%d %H:%M")
-                    booking_duration = booking["duration"] or 60
-                    booking_end = booking_datetime + timedelta(minutes=booking_duration)
-                    
-                    # Check for overlap
-                    if not (slot_end <= booking_datetime or slot_datetime >= booking_end):
-                        is_available = False
-                        break
+                booking_time_val = booking["session_time"]
+                if isinstance(booking_time_val, time_type):
+                    booking_hour, booking_min = booking_time_val.hour, booking_time_val.minute
+                elif isinstance(booking_time_val, str):
+                    booking_hour, booking_min = map(int, booking_time_val.split(':')[:2])
+                else:
+                    continue
+                booking_datetime = datetime.strptime(f"{date_str} {booking_hour:02d}:{booking_min:02d}", "%Y-%m-%d %H:%M")
+                booking_duration = booking["duration"] or 60
+                booking_end = booking_datetime + timedelta(minutes=booking_duration)
+
+                # Check for overlap
+                if not (slot_end <= booking_datetime or slot_datetime >= booking_end):
+                    is_available = False
+                    break
             
             if is_available:
                 available_slots.append(slot_time)
