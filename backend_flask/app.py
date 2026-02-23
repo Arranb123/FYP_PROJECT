@@ -2783,125 +2783,95 @@ def get_booking_messages(booking_id):
 @app.route('/api/messages', methods=['GET'])
 def get_user_messages():
     """
-    Retrieves all messages for a user (learner or tutor) across all their bookings.
-    Groups messages by booking and includes booking details.
+    Retrieves all confirmed bookings for a user with their messages.
+    Returns all confirmed bookings even if no messages have been sent yet,
+    so users can start a conversation from the Messages tab.
     """
+    conn = None
     try:
         user_id = request.args.get('user_id', type=int)
         user_role = request.args.get('user_role')
-        
+
         if not user_id or not user_role:
             return jsonify({"error": "Missing required query parameters: user_id and user_role"}), 400
-        
+
         if user_role not in ['learner', 'tutor']:
             return jsonify({"error": "user_role must be 'learner' or 'tutor'"}), 400
-        
-        conn = None
+
         conn = get_db_connection()
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        
-        # Get all bookings for this user
+
+        # Get all confirmed bookings for this user
         if user_role == 'learner':
             cursor.execute("""
                 SELECT booking_id, tutor_id, session_date, session_time, status, module
                 FROM bookings
                 WHERE learner_id = %s AND status IN ('confirmed', 'accepted')
+                ORDER BY session_date DESC
             """, (user_id,))
-        else:  # user_role == 'tutor'
+        else:
             cursor.execute("""
                 SELECT booking_id, learner_id, session_date, session_time, status, module
                 FROM bookings
                 WHERE tutor_id = %s AND status IN ('confirmed', 'accepted')
+                ORDER BY session_date DESC
             """, (user_id,))
-        
+
         bookings = cursor.fetchall()
-        
+
         if not bookings:
             return jsonify([]), 200
-        
-        # Get all messages for these bookings
-        booking_ids = [b["booking_id"] for b in bookings]
-        
-        # If no booking IDs, return empty list
-        if not booking_ids:
-            return jsonify([]), 200
-        
-        placeholders = ','.join(['%s'] * len(booking_ids))
-        
-        cursor.execute(f"""
-            SELECT m.message_id, m.booking_id, m.sender_id, m.sender_role, 
-                   m.message_text, m.read_at, m.created_at,
-                   b.session_date, b.session_time, b.status, b.module
-            FROM messages m
-            JOIN bookings b ON m.booking_id = b.booking_id
-            WHERE m.booking_id IN ({placeholders})
-            ORDER BY b.booking_id DESC, m.created_at ASC
-        """, booking_ids)
-        
-        messages = cursor.fetchall()
-        
-        # If no messages, return empty list
-        if not messages:
-            return jsonify([]), 200
-        
-        # Get names for learners/tutors
+
         result = []
-        booking_groups = {}
-        
-        for msg in messages:
-            booking_id = msg["booking_id"]
-            
-            if booking_id not in booking_groups:
-                # Get the other party's name
-                if user_role == 'learner':
-                    cursor.execute("""
-                        SELECT first_name, last_name, college_email
-                        FROM tutors
-                        WHERE tutor_id = (SELECT tutor_id FROM bookings WHERE booking_id = %s)
-                    """, (booking_id,))
-                else:  # user_role == 'tutor'
-                    cursor.execute("""
-                        SELECT first_name, last_name, college_email
-                        FROM students
-                        WHERE id = (SELECT learner_id FROM bookings WHERE booking_id = %s)
-                    """, (booking_id,))
-                
-                other_party = cursor.fetchone()
-                other_party_name = f"{other_party['first_name']} {other_party['last_name']}" if other_party else "Unknown"
-                
-                # Iteration 4 - Safely get module field
-                try:
-                    module_value = msg["module"] if msg["module"] else ""
-                except (KeyError, IndexError):
-                    module_value = ""
-                
-                booking_groups[booking_id] = {
-                    "booking_id": booking_id,
-                    "session_date": msg["session_date"],
-                    "session_time": msg["session_time"],
-                    "status": msg["status"],
-                    "module": module_value,
-                    "other_party_name": other_party_name,
-                    "messages": []
-                }
-            
-            booking_groups[booking_id]["messages"].append({
-                "message_id": msg["message_id"],
-                "sender_id": msg["sender_id"],
-                "sender_role": msg["sender_role"],
-                "message_text": msg["message_text"],
-                "read_at": msg["read_at"],
-                "created_at": msg["created_at"]
+        for booking in bookings:
+            booking_id = booking["booking_id"]
+
+            # Get messages for this booking
+            cursor.execute("""
+                SELECT message_id, sender_id, sender_role, message_text, read_at, created_at
+                FROM messages
+                WHERE booking_id = %s
+                ORDER BY created_at ASC
+            """, (booking_id,))
+            messages = cursor.fetchall()
+
+            # Get the other party's name
+            if user_role == 'learner':
+                cursor.execute(
+                    "SELECT first_name, last_name FROM tutors WHERE tutor_id = %s",
+                    (booking["tutor_id"],)
+                )
+            else:
+                cursor.execute(
+                    "SELECT first_name, last_name FROM students WHERE id = %s",
+                    (booking["learner_id"],)
+                )
+            other_party = cursor.fetchone()
+            other_party_name = f"{other_party['first_name']} {other_party['last_name']}" if other_party else "Unknown"
+
+            result.append({
+                "booking_id": booking_id,
+                "session_date": booking["session_date"],
+                "session_time": booking["session_time"],
+                "status": booking["status"],
+                "module": booking["module"] or "",
+                "other_party_name": other_party_name,
+                "messages": [
+                    {
+                        "message_id": msg["message_id"],
+                        "sender_id": msg["sender_id"],
+                        "sender_role": msg["sender_role"],
+                        "message_text": msg["message_text"],
+                        "read_at": msg["read_at"],
+                        "created_at": msg["created_at"]
+                    }
+                    for msg in messages
+                ]
             })
-        
-        # Convert to list
-        result = list(booking_groups.values())
-        
+
         return jsonify(result), 200
     except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
-    except Exception as e:
-        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
     finally:
         if conn:
             conn.close()
