@@ -166,7 +166,7 @@ function App() {
     setAuthPage(null); // Iteration 4 - Return to landing page
   };
 
-  const API_URL = "${process.env.REACT_APP_API_URL}/students"; // Flask backend API URL // defines backend endpoint, allows to call flask from react and modify DB
+  const API_URL = `${process.env.REACT_APP_API_URL}/students`; // Flask backend API URL // defines backend endpoint, allows to call flask from react and modify DB
 
   // Iteration 3 - check for stored user on mount
   // Iteration 4 - Modified to show landing page instead of login
@@ -240,7 +240,7 @@ function App() {
   const fetchTutors = async () => {
     try {
       // Make a GET request to the backend to get all verified tutors
-      const res = await fetch("${process.env.REACT_APP_API_URL}/api/tutors");
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/api/tutors`);
       // Convert the response from JSON format to JavaScript objects
       const data = await res.json();
       // Update the tutors state with the data received

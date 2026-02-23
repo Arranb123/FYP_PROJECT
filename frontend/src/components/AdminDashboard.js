@@ -61,7 +61,7 @@ function AdminDashboard({ onLogout, currentUser }) {
   //store unverified tutors retrieved from the backend
   const [tutors, setTutors] = useState([]);
     //  endpoint for unverified tutor list
-  const API_URL = "${process.env.REACT_APP_API_URL}/api/tutors/unverified";
+  const API_URL = `${process.env.REACT_APP_API_URL}/api/tutors/unverified`;
   const [tutorsCurrentPage, setTutorsCurrentPage] = useState(1);
   const TUTORS_PER_PAGE = 10;
   
@@ -178,7 +178,7 @@ function AdminDashboard({ onLogout, currentUser }) {
   const generateReport = async () => {
     setLoadingReport(true);
     try {
-      const response = await axios.get("${process.env.REACT_APP_API_URL}/api/admin/report");
+      const response = await axios.get(`${process.env.REACT_APP_API_URL}/api/admin/report`);
       setReport(response.data);
     } catch (error) {
       console.error("Error generating report:", error);
@@ -208,7 +208,7 @@ function AdminDashboard({ onLogout, currentUser }) {
     setLoadingUsers(true);
     setUsersError("");
     try {
-      const response = await axios.get("${process.env.REACT_APP_API_URL}/api/admin/users");
+      const response = await axios.get(`${process.env.REACT_APP_API_URL}/api/admin/users`);
       setUsers(response.data);
     } catch (error) {
       setUsersError(error?.response?.data?.error || "Failed to load users. Please try again.");
@@ -247,7 +247,7 @@ function AdminDashboard({ onLogout, currentUser }) {
     
     setChangingPassword(true);
     try {
-      await axios.put('${process.env.REACT_APP_API_URL}/api/admin/change-password', {
+      await axios.put(`${process.env.REACT_APP_API_URL}/api/admin/change-password`, {
         email: currentUser?.email,
         current_password: passwordForm.current_password,
         new_password: passwordForm.new_password
@@ -1290,7 +1290,7 @@ const AdminAllBookings = () => {
     setLoading(true);
     setError("");
     try {
-      const res = await axios.get("${process.env.REACT_APP_API_URL}/api/admin/bookings");
+      const res = await axios.get(`${process.env.REACT_APP_API_URL}/api/admin/bookings`);
       setBookings(res.data);
     } catch (err) {
       setError(err?.response?.data?.error || "Failed to load bookings");
@@ -1470,7 +1470,7 @@ const AdminAllReviews = () => {
     setLoading(true);
     setError("");
     try {
-      const res = await axios.get("${process.env.REACT_APP_API_URL}/api/admin/reviews");
+      const res = await axios.get(`${process.env.REACT_APP_API_URL}/api/admin/reviews`);
       setReviews(res.data);
     } catch (err) {
       setError(err?.response?.data?.error || "Failed to load reviews");

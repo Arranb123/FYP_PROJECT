@@ -132,7 +132,7 @@ const TutorSignup = () => {
       }
       
       
-      const response = await axios.post("${process.env.REACT_APP_API_URL}/api/tutors", tutorData, {
+      const response = await axios.post(`${process.env.REACT_APP_API_URL}/api/tutors`, tutorData, {
         headers: {
           'Content-Type': 'application/json'
         },

@@ -147,7 +147,7 @@ const LearnerBookings = ({ learnerId, onNavigateToTutors }) => {
     setActionLoadingId(booking.booking_id);
     
     try {
-      await axios.post("${process.env.REACT_APP_API_URL}/api/reviews", {
+      await axios.post(`${process.env.REACT_APP_API_URL}/api/reviews`, {
         booking_id: booking.booking_id,
         learner_id: learnerId,
         tutor_id: booking.tutor_id,

@@ -74,7 +74,7 @@ const Register = ({ onRegisterSuccess }) => {
     try {
       // Send registration data to backend
       // Iteration 5 - Send modules when registering as a learner
-      const response = await axios.post("${process.env.REACT_APP_API_URL}/api/auth/register", {
+      const response = await axios.post(`${process.env.REACT_APP_API_URL}/api/auth/register`, {
         email: formData.email,
         password: formData.password,
         role: formData.role,

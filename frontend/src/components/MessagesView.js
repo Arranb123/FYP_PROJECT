@@ -26,7 +26,7 @@ const MessagesView = ({ userId, userRole }) => {
     setLoading(true);
     setError("");
     try {
-      const response = await axios.get("${process.env.REACT_APP_API_URL}/api/messages", {
+      const response = await axios.get(`${process.env.REACT_APP_API_URL}/api/messages`, {
         params: {
           user_id: userId,
           user_role: userRole,
