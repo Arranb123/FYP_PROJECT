@@ -33,7 +33,7 @@ const BookingMessages = ({ bookingId, userId, userRole, bookingStatus }) => {
     setError("");
     try {
       const response = await axios.get(
-        `http://127.0.0.1:5000/api/bookings/${bookingId}/messages`,
+        `${process.env.REACT_APP_API_URL}/api/bookings/${bookingId}/messages`,
         {
           params: {
             user_id: userId,
@@ -63,7 +63,7 @@ const BookingMessages = ({ bookingId, userId, userRole, bookingStatus }) => {
     setError("");
     try {
       await axios.post(
-        `http://127.0.0.1:5000/api/bookings/${bookingId}/messages`,
+        `${process.env.REACT_APP_API_URL}/api/bookings/${bookingId}/messages`,
         {
           sender_id: userId,
           sender_role: userRole,

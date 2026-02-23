@@ -23,6 +23,9 @@ requests==2.31.0
 # Timezone support
 pytz==2024.1
 
-# Note: sqlite3, datetime, and pathlib are built-in Python modules
-# No need to install them separately
+# Production WSGI server
+gunicorn==21.2.0
+
+# PostgreSQL database driver
+psycopg2-binary==2.9.9
 

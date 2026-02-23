@@ -35,7 +35,7 @@ const TutorProfileEdit = ({ tutorId }) => {
 
     setLoading(true);
     try {
-      const res = await axios.get(`http://127.0.0.1:5000/api/tutors/${tutorId}`);
+      const res = await axios.get(`${process.env.REACT_APP_API_URL}/api/tutors/${tutorId}`);
       const tutor = res.data;
 
       if (tutor) {
@@ -89,7 +89,7 @@ const TutorProfileEdit = ({ tutorId }) => {
 
     setSubmitting(true);
     try {
-      await axios.put(`http://127.0.0.1:5000/api/tutors/${tutorId}`, {
+      await axios.put(`${process.env.REACT_APP_API_URL}/api/tutors/${tutorId}`, {
         modules: formData.modules,
         hourly_rate: hourlyRate,
         bio: formData.bio || "",

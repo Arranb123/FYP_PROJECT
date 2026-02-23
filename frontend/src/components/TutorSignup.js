@@ -132,7 +132,7 @@ const TutorSignup = () => {
       }
       
       
-      const response = await axios.post("http://127.0.0.1:5000/api/tutors", tutorData, {
+      const response = await axios.post("${process.env.REACT_APP_API_URL}/api/tutors", tutorData, {
         headers: {
           'Content-Type': 'application/json'
         },
@@ -191,7 +191,7 @@ const TutorSignup = () => {
       // Better error handling for network errors
       let errorMessage = "Error registering tutor. Please try again.";
       if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error') || error.message?.includes('Failed to fetch')) {
-        errorMessage = "Network Error: Cannot connect to server. Please make sure the Flask server is running on http://127.0.0.1:5000";
+        errorMessage = "Network Error: Cannot connect to server. Please make sure the Flask server is running on ${process.env.REACT_APP_API_URL}";
       } else if (error.response?.data?.error) {
         errorMessage = error.response.data.error;
       } else if (error.message) {

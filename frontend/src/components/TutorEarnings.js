@@ -25,7 +25,7 @@ const TutorEarnings = ({ tutorId }) => {
     setError("");
     try {
       const response = await axios.get(
-        `http://127.0.0.1:5000/api/tutors/${tutorId}/earnings`
+        `${process.env.REACT_APP_API_URL}/api/tutors/${tutorId}/earnings`
       );
       setEarnings(response.data);
     } catch (err) {

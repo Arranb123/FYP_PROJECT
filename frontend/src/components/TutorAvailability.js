@@ -40,7 +40,7 @@ const TutorAvailability = ({ tutorId }) => {
     setError("");
     
     try {
-      const response = await axios.get(`http://127.0.0.1:5000/api/tutors/${tutorId}/availability`);
+      const response = await axios.get(`${process.env.REACT_APP_API_URL}/api/tutors/${tutorId}/availability`);
       setAvailability(response.data);
     } catch (error) {
       const errorMsg = error?.response?.data?.error || error?.message || "Failed to load availability";
@@ -88,7 +88,7 @@ const TutorAvailability = ({ tutorId }) => {
       const startTimeFormatted = formData.start_time + ":00";
       const endTimeFormatted = formData.end_time + ":00";
       
-      await axios.post(`http://127.0.0.1:5000/api/tutors/${tutorId}/availability`, {
+      await axios.post(`${process.env.REACT_APP_API_URL}/api/tutors/${tutorId}/availability`, {
         day_of_week: parseInt(formData.day_of_week),
         start_time: startTimeFormatted,
         end_time: endTimeFormatted,

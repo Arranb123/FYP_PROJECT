@@ -28,7 +28,7 @@ const LearnerProfileEdit = ({ learnerId }) => {
 
     setLoading(true);
     try {
-      const res = await axios.get(`http://127.0.0.1:5000/students/${learnerId}`);
+      const res = await axios.get(`${process.env.REACT_APP_API_URL}/students/${learnerId}`);
       const learner = res.data;
 
       if (learner) {
@@ -79,7 +79,7 @@ const LearnerProfileEdit = ({ learnerId }) => {
 
     setSubmitting(true);
     try {
-      await axios.put(`http://127.0.0.1:5000/students/${learnerId}`, {
+      await axios.put(`${process.env.REACT_APP_API_URL}/students/${learnerId}`, {
         first_name: formData.first_name,
         last_name: formData.last_name,
         college_email: learnerInfo.college_email,

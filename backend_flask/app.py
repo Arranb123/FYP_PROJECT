@@ -5,26 +5,20 @@
 
 #Imports and flask setup
 from flask import Flask, request, jsonify
-import sqlite3
+import psycopg2
+import psycopg2.extras
 from flask_cors import CORS  #import and flask setup   # https://flask-cors.readthedocs.io/en/latest/
 # Iteration 2 additions
 from datetime import datetime, timedelta
-from pathlib import Path
 import os
 import re
 
-# Iteration 2 - Database path handling for corruption recovery
-# Get the directory where this Python file is located
-# This helps find the database file no matter where the script is run from
-BASE_DIR = Path(__file__).resolve().parent
-# The name of the database file
-DB_FILENAME = "fyp_tutoring.db"
-# The full path to the database file (combines the directory and filename)
-DB_PATH = BASE_DIR / DB_FILENAME
+# PostgreSQL connection URL from environment variable
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
-# Story 15 - Uploads directory for proof documents
-UPLOADS_DIR = BASE_DIR / "uploads"
-UPLOADS_DIR.mkdir(exist_ok=True)  # Create uploads directory if it doesn't exist
+# Uploads directory for proof documents
+UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "uploads")
+os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 app = Flask(__name__)
 # Enhanced CORS configuration to handle all requests properly
@@ -44,41 +38,9 @@ app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB max file size
 #https://www.w3schools.com/python/ref_module_sqlite3.asp#:~:text=Definition%20and%20Usage,needing%20a%20separate%20database%20server.
 #every time i run an sql query it calls this function
 def get_db_connection():
-    # Iteration 2 - Use DB_PATH instead of hardcoded filename
-    # Iteration 3 - Add timeout to prevent database locking issues
-    conn = sqlite3.connect(str(DB_PATH), timeout=10.0)
-    conn.row_factory = sqlite3.Row  ##this line from gpt - lets you access database results as dictionaries instead of tuples — easier for JSON formatting.
+    conn = psycopg2.connect(DATABASE_URL)
     return conn
 
-
-# Iteration 2 - Database corruption recovery function - https://chatgpt.com/share/691cdc1c-f098-8008-a3a9-72ed9ea757bb
-# I used chatgpt to help me understand how to backup the database and how to handle errors
-def backup_corrupt_database():
-    # Backs up corrupted database before recreating it
-    # Check if the database file actually exists
-    if not DB_PATH.exists():
-        # If it doesn't exist, there's nothing to backup, so return None
-        return None
-
-    # Create a timestamp string in the format YYYYMMDD_HHMMSS (e.g., 20241111_143052)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    # Create a new filename with the timestamp (e.g., fyp_tutoring.corrupt_20241111_143052.db)
-    backup_name = f"{DB_PATH.stem}.corrupt_{timestamp}{DB_PATH.suffix}"
-    # Create the full path for the backup file (same directory, different name)
-    backup_path = DB_PATH.with_name(backup_name)
-
-    try:
-        # Rename/move the corrupted file to the backup location
-        DB_PATH.replace(backup_path)
-        # Print a message telling the user where the backup was saved
-        print(f"Corrupted database backed up to '{backup_path.name}'")
-        # Return the backup path in case I need it later
-        return backup_path
-    except OSError as err:
-        # If I can't create the backup (maybe file is locked), print an error
-        print(f"Failed to back up corrupted database: {err}")
-        # Return None to indicate the backup failed
-        return None
 
 ###################
 ###################
@@ -93,263 +55,142 @@ def backup_corrupt_database():
 #IS2208 and IS2209 , Simon woodworth
 # from line 34 to 250~
 
-def init_database(retry_on_corruption=True):
-    # Sets up database tables on server start
-    # retry_on_corruption: if True, tries to fix corrupted database automatically
-    # Start with no connection (conn = None)
+def init_database():
     conn = None
     try:
-        # Get a connection to the database
         conn = get_db_connection()
-        # Create a cursor - this is what I use to execute SQL commands
-        cursor = conn.cursor()
-        
-        # Create the students table if it doesn't already exist
-        # This table stores information about students/learners who use the platform
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS students (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,  -- Auto-incrementing unique ID for each student
-            first_name TEXT,                       -- Student's first name
-            last_name TEXT,                        -- Student's last name
-            college_email TEXT,                    -- Student's email address
-            created_at TIMESTAMP,                 -- When this record was created
-            updated_at TIMESTAMP                   -- When this record was last updated
+            id SERIAL PRIMARY KEY,
+            first_name TEXT,
+            last_name TEXT,
+            college_email TEXT,
+            modules TEXT DEFAULT '',
+            created_at TIMESTAMP,
+            updated_at TIMESTAMP
         );
         """)
-        
-        # Try to add created_at column to students table if it doesn't exist
-        # This is for databases that were created before I added timestamps
-        # SQLite doesn't support DEFAULT CURRENT_TIMESTAMP in ALTER TABLE, so I add without default
-        try:
-            # Try to add the created_at column
-            cursor.execute("ALTER TABLE students ADD COLUMN created_at TIMESTAMP")
-            # Save the changes
-            conn.commit()
-        except sqlite3.OperationalError:
-            # If I get an error, it means the column already exists, so I just ignore it
-            pass  # Column already exists
-        
-        # Try to add updated_at column to students table if it doesn't exist
-        try:
-            # Try to add the updated_at column
-            cursor.execute("ALTER TABLE students ADD COLUMN updated_at TIMESTAMP")
-            # Save the changes
-            conn.commit()
-        except sqlite3.OperationalError:
-            # If I get an error, it means the column already exists, so I just ignore it
-            pass  # Column already exists
 
-        # Iteration 5 - Add modules column to students table so learners can store what they study
-        try:
-            cursor.execute("ALTER TABLE students ADD COLUMN modules TEXT DEFAULT ''")
-            conn.commit()
-        except sqlite3.OperationalError:
-            pass  # Column already exists
-
-        # Create the tutors table if it doesn't already exist
-        # This table stores information about tutors who offer tutoring services
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS tutors (
-            tutor_id INTEGER PRIMARY KEY AUTOINCREMENT,  -- Auto-incrementing unique ID for each tutor
-            first_name TEXT NOT NULL,                    -- Tutor's first name (required)
-            last_name TEXT NOT NULL,                     -- Tutor's last name (required)
-            college_email TEXT UNIQUE NOT NULL,          -- Tutor's email (must be unique, required)
-            modules TEXT NOT NULL,                       -- What subjects/modules the tutor teaches (required)
-            hourly_rate REAL NOT NULL,                   -- How much the tutor charges per hour (required)
-            rating REAL DEFAULT 0,                        -- Tutor's average rating (starts at 0)
-            bio TEXT,                                    -- Optional description about the tutor
-            profile_pic TEXT,                            -- Optional path to tutor's profile picture
-            verified INTEGER DEFAULT 0,                 -- Whether admin has approved this tutor (0 = no, 1 = yes)
-            proof_doc BLOB,                              -- Optional proof of qualifications (stored as binary data)
-            created_at TIMESTAMP,                        -- When this record was created
-            updated_at TIMESTAMP                          -- When this record was last updated
+            tutor_id SERIAL PRIMARY KEY,
+            first_name TEXT NOT NULL,
+            last_name TEXT NOT NULL,
+            college_email TEXT UNIQUE NOT NULL,
+            modules TEXT NOT NULL,
+            hourly_rate REAL NOT NULL,
+            rating REAL DEFAULT 0,
+            bio TEXT,
+            profile_pic TEXT,
+            verified INTEGER DEFAULT 0,
+            proof_doc BYTEA,
+            created_at TIMESTAMP,
+            updated_at TIMESTAMP
         );
         """)
-        
-        # Iteration 4 - Add module column to bookings table if it doesn't exist
-        # added this so each booking can have a specific module instead of all tutor modules
-        # ref: SQLite ALTER TABLE - https://www.sqlite.org/lang_altertable.html
-        try:
-            cursor.execute("ALTER TABLE bookings ADD COLUMN module TEXT")
-            conn.commit()
-        except sqlite3.OperationalError:
-            pass  # Column already exists
-        
-        # Try to add created_at column to tutors table if it doesn't exist
-        try:
-            cursor.execute("ALTER TABLE tutors ADD COLUMN created_at TIMESTAMP")
-            conn.commit()
-        except sqlite3.OperationalError:
-            pass  # Column already exists
-        
-        # Try to add updated_at column to tutors table if it doesn't exist
-        try:
-            cursor.execute("ALTER TABLE tutors ADD COLUMN updated_at TIMESTAMP")
-            conn.commit()
-        except sqlite3.OperationalError:
-            pass  # Column already exists
-        
-        # Create the bookings table if it doesn't already exist
-        # This table stores information about tutoring sessions that have been booked
+
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS bookings (
-            booking_id INTEGER PRIMARY KEY AUTOINCREMENT,  -- Autoincrementing unique ID for each booking
-            learner_id INTEGER NOT NULL,                   -- ID of the student who made the booking 
-            tutor_id INTEGER NOT NULL,                     -- ID of the tutor for this session 
-            session_date DATE NOT NULL,                    -- Date when the session will happen 
-            session_time TIME NOT NULL,                    -- Time when the session will happen 
-            duration INTEGER NOT NULL DEFAULT 60,          -- How long the session is in minutes (defaults to 60)
-            status TEXT NOT NULL DEFAULT 'pending',        -- Status of the booking (pending, confirmed, cancelled
-            created_at TIMESTAMP,                          -- When this booking was created (set once when booking is made)
-            updated_at TIMESTAMP,                           -- When this booking was last updated changes every time booking is modified cancel, reschedule
-            FOREIGN KEY (learner_id) REFERENCES students(id),  -- Links to students table
-            FOREIGN KEY (tutor_id) REFERENCES tutors(tutor_id)  -- Links to tutors table
+            booking_id SERIAL PRIMARY KEY,
+            learner_id INTEGER NOT NULL,
+            tutor_id INTEGER NOT NULL,
+            session_date DATE NOT NULL,
+            session_time TIME NOT NULL,
+            duration INTEGER NOT NULL DEFAULT 60,
+            status TEXT NOT NULL DEFAULT 'pending',
+            module TEXT,
+            created_at TIMESTAMP,
+            updated_at TIMESTAMP,
+            FOREIGN KEY (learner_id) REFERENCES students(id),
+            FOREIGN KEY (tutor_id) REFERENCES tutors(tutor_id)
         );
         """)
-        
-        # Iteration 3 - Create reviews table if it doesn't exist
-        # This table stores ratings and reviews that learners leave after sessions
+
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS reviews (
-            review_id INTEGER PRIMARY KEY AUTOINCREMENT,  -- Autoincrementing unique ID for each review
-            booking_id INTEGER NOT NULL,                   -- ID of the booking this review is for
-            learner_id INTEGER NOT NULL,                   -- ID of the learner who wrote the review
-            tutor_id INTEGER NOT NULL,                     -- ID of the tutor being reviewed
-            rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),  -- Rating from 1 to 5 stars
-            comment TEXT,                                  -- Optional text comment from the learner
-            created_at TIMESTAMP,                          -- When this review was created
-            FOREIGN KEY (booking_id) REFERENCES bookings(booking_id),  -- Links to bookings table
-            FOREIGN KEY (learner_id) REFERENCES students(id),  -- Links to students table
-            FOREIGN KEY (tutor_id) REFERENCES tutors(tutor_id)  -- Links to tutors table
+            review_id SERIAL PRIMARY KEY,
+            booking_id INTEGER NOT NULL,
+            learner_id INTEGER NOT NULL,
+            tutor_id INTEGER NOT NULL,
+            rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+            comment TEXT,
+            created_at TIMESTAMP,
+            FOREIGN KEY (booking_id) REFERENCES bookings(booking_id),
+            FOREIGN KEY (learner_id) REFERENCES students(id),
+            FOREIGN KEY (tutor_id) REFERENCES tutors(tutor_id)
         );
         """)
-        
-        # Iteration 3 - Create users table if it doesn't exist
-        # This table stores user authentication information (login credentials)
+
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY AUTOINCREMENT,  -- Autoincrementing unique ID for each user
-            email TEXT UNIQUE NOT NULL,                 -- User's email (used for login, must be unique)
-            password TEXT NOT NULL,                     -- Hashed password for authentication
-            role TEXT NOT NULL DEFAULT 'learner',       -- User role: 'learner', 'tutor', or 'admin'
-            student_id INTEGER,                          -- Links to students table if role is learner
-            tutor_id INTEGER,                           -- Links to tutors table if role is tutor
-            is_active INTEGER DEFAULT 1,                 -- Iteration 4 - Account status: 1=active, 0=deactivated
-            -- ref: SQLite user management - https://www.sqlitetutorial.net/sqlite-alter-table/
-            created_at TIMESTAMP,                        -- When this user account was created
-            updated_at TIMESTAMP,                        -- When this user account was last updated
-            FOREIGN KEY (student_id) REFERENCES students(id),  -- Links to students table
-            FOREIGN KEY (tutor_id) REFERENCES tutors(tutor_id)  -- Links to tutors table
+            user_id SERIAL PRIMARY KEY,
+            email TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'learner',
+            student_id INTEGER,
+            tutor_id INTEGER,
+            is_active INTEGER DEFAULT 1,
+            created_at TIMESTAMP,
+            updated_at TIMESTAMP,
+            FOREIGN KEY (student_id) REFERENCES students(id),
+            FOREIGN KEY (tutor_id) REFERENCES tutors(tutor_id)
         );
         """)
-        
-        # Iteration 4 - Add is_active column to users table if it doesn't exist
-        try:
-            cursor.execute("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1")
-            # Update all existing users to be active by default
-            cursor.execute("UPDATE users SET is_active = 1 WHERE is_active IS NULL")
-            conn.commit()
-            print("[INFO] Added 'is_active' column to users table.")
-        except sqlite3.OperationalError as e:
-            if "duplicate column name: is_active" in str(e):
-                print("[INFO] 'is_active' column already exists in users table.")
-            else:
-                print(f"[ERROR] Failed to add 'is_active' column to users table: {e}")
-        
-        # Iteration 4 - Create tutor availability table
-        # This table stores when tutors are available for sessions
-        # ref: https://www.w3schools.com/sql/sql_create_table.asp
+
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS tutor_availability (
-            availability_id INTEGER PRIMARY KEY AUTOINCREMENT,  -- Autoincrementing unique ID
-            tutor_id INTEGER NOT NULL,                          -- ID of the tutor
-            day_of_week INTEGER NOT NULL CHECK (day_of_week >= 0 AND day_of_week <= 6),  -- 0=Monday, 6=Sunday
-            start_time TIME NOT NULL,                           -- Start time (e.g., '09:00:00')
-            end_time TIME NOT NULL,                             -- End time (e.g., '17:00:00')
-            is_available INTEGER DEFAULT 1,                     -- 1=available, 0=unavailable
-            created_at TIMESTAMP,                               -- When this availability was created
-            updated_at TIMESTAMP,                                -- When this availability was last updated
-            FOREIGN KEY (tutor_id) REFERENCES tutors(tutor_id)    -- Links to tutors table
+            availability_id SERIAL PRIMARY KEY,
+            tutor_id INTEGER NOT NULL,
+            day_of_week INTEGER NOT NULL CHECK (day_of_week >= 0 AND day_of_week <= 6),
+            start_time TIME NOT NULL,
+            end_time TIME NOT NULL,
+            is_available INTEGER DEFAULT 1,
+            created_at TIMESTAMP,
+            updated_at TIMESTAMP,
+            FOREIGN KEY (tutor_id) REFERENCES tutors(tutor_id)
         );
         """)
-        
-        # Iteration 4 - Create messages table for booking communication
-        # This table stores messages between learners and tutors for accepted bookings
-        # ChatGPT conversation reference for messaging feature implementation:
-        # https://chatgpt.com/share/6984af21-d9ac-8008-a016-f00a20286dd1
+
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS messages (
-            message_id INTEGER PRIMARY KEY AUTOINCREMENT,  -- Autoincrementing unique ID for each message
-            booking_id INTEGER NOT NULL,                   -- ID of the booking this message belongs to
-            sender_id INTEGER NOT NULL,                     -- ID of the sender (learner_id or tutor_id)
-            sender_role TEXT NOT NULL,                      -- Role of sender: 'learner' or 'tutor'
-            message_text TEXT NOT NULL,                     -- The actual message content
-            read_at TIMESTAMP,                              -- When the message was read (NULL if unread)
-            created_at TIMESTAMP,                           -- When this message was created
-            FOREIGN KEY (booking_id) REFERENCES bookings(booking_id)  -- Links to bookings table
+            message_id SERIAL PRIMARY KEY,
+            booking_id INTEGER NOT NULL,
+            sender_id INTEGER NOT NULL,
+            sender_role TEXT NOT NULL,
+            message_text TEXT NOT NULL,
+            read_at TIMESTAMP,
+            created_at TIMESTAMP,
+            FOREIGN KEY (booking_id) REFERENCES bookings(booking_id)
         );
         """)
-        # End Iteration 3 - Database tables created
-        
-        # Save all the changes made to the database
+
         conn.commit()
-        # Close the database connection
         conn.close()
-    except sqlite3.DatabaseError as e:
-        # If I get a database error (like corruption), handle it here
-        print(f"Database error during initialization: {e}")
-        # If I'm allowed to retry and the database is corrupted
-        if retry_on_corruption:
-            print("Attempting automatic recovery...")
-            # Try to close the connection if it exists
-            if conn:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-            # Backup the corrupted database
-            backup_corrupt_database()
-            print("Recreating a fresh database file...")
-            # Try to initialize again, but don't retry if it fails again
-            return init_database(retry_on_corruption=False)
-        else:
-            # If I already tried once or retry is disabled, give up
-            print("Recovery attempt failed.")
-            # Try to close the connection if it exists
-            if conn:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-            # Raise the error so the program knows something went wrong
-            raise
+        print("Database initialized successfully")
     except Exception as e:
-        # If I get any other unexpected error, print it 
-        print(f"Unexpected error during database initialization: {e}")
+        print(f"Error initializing database: {e}")
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
         raise
 
-# Try to initialize the database when the server starts
 try:
-    # Call the init_database function to set up all the tables
     init_database()
-    # If successful, print a success message
-    print("Database initialized successfully")
-except sqlite3.DatabaseError as e:
-    # If the database is corrupted and couldn't be fixed automatically
-    print(f"CRITICAL: Database initialization failed after automatic recovery attempt. Error: {e}")
-    print("ACTION REQUIRED: Inspect the backup '*.corrupt_YYYYMMDD_HHMMSS.db' file and restore manually if needed.")
-    print("You can delete the corrupted file and restart the server to generate a fresh empty database.")
 except Exception as e:
-    # If any other error occurs, print it and stop the server
     print(f"Error initializing database: {e}")
-    raise
 
 
 @app.route('/students', methods=['GET'])
 def get_students():
     #receive all student records
     conn = get_db_connection()
-    students = conn.execute("SELECT * FROM students").fetchall()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute("SELECT * FROM students")
+    students = cursor.fetchall()
     conn.close()
     student_list = [
         {"id": s["id"], "first_name": s["first_name"], "last_name": s["last_name"], "college_email": s["college_email"], "modules": s["modules"] or ""} #loops through student records and converts to dict then returns as json
@@ -363,8 +204,8 @@ def get_students():
 @app.route('/students/<int:id>', methods=['GET'])
 def get_student(id):
     conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM students WHERE id = ?", (id,))
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute("SELECT * FROM students WHERE id = %s", (id,))
     student = cursor.fetchone()
     conn.close()
 
@@ -395,11 +236,11 @@ def add_student():
         return jsonify({"error": "Missing required fields"}), 400 # validates input so incomplete fields cant be used
 
     conn = get_db_connection()# opens connection to DB
-    cursor = conn.cursor()#
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)#
     # Iteration 2 - Added created_at and updated_at timestamps
     # Timestamps track when student was added and when their info was last changed
     cursor.execute(
-        "INSERT INTO students (first_name, last_name, college_email, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",#runs sql insert command to add a new line to the db
+        "INSERT INTO students (first_name, last_name, college_email, created_at, updated_at) VALUES (%s, %s, %s, %s, %s)",#runs sql insert command to add a new line to the db
         (first_name, last_name, college_email, datetime.now(), datetime.now()) # this provides the actual values to be inserted - both timestamps set to now when created
     )
     conn.commit()
@@ -430,9 +271,9 @@ def update_student(id):#defines the function
     conn = get_db_connection() #opens a connection to db
     # Iteration 2 - Added updated_at timestamp and error handling
     # updated_at timestamp shows when student info was last modified - useful for tracking changes
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cursor.execute(
-        "UPDATE students SET first_name=?, last_name=?, college_email=?, modules=?, updated_at=? WHERE id=?",
+        "UPDATE students SET first_name=%s, last_name=%s, college_email=%s, modules=%s, updated_at=%s WHERE id=%s",
         (first_name, last_name, college_email, modules, datetime.now(), id)#gives the actual values to update it - updated_at set to current time
     )
     # Iteration 2 - Check if student exists
@@ -450,8 +291,8 @@ def delete_student(id):
     #delete a student by id
     conn = get_db_connection()
     # Iteration 2 - Added error handling
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM students WHERE id=?", (id,))
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute("DELETE FROM students WHERE id=%s", (id,))
     # Iteration 2 - Check if student exists
     if cursor.rowcount == 0:
         conn.close()
@@ -563,27 +404,28 @@ def add_tutor():
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         #insert tutor into database
         # Iteration 2 - Added created_at and updated_at timestamps
         # Timestamps track when tutor signed up and when their info was last changed
         now = datetime.now()
         cursor.execute("""
             INSERT INTO tutors (first_name, last_name, college_email, modules, hourly_rate, rating, bio, profile_pic, verified, proof_doc, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING tutor_id
         """, (first_name, last_name, college_email, modules, hourly_rate, rating, bio, profile_pic, verified, proof_doc_binary, now, now))
+        new_id = cursor.fetchone()["tutor_id"]
         conn.commit()
-        new_id = cursor.lastrowid
         
         # Story 11 - If user account exists with this email and role is tutor, link them
         # Use case-insensitive email matching
-        cursor.execute("SELECT user_id, email FROM users WHERE LOWER(email) = LOWER(?) AND role = 'tutor'", (college_email,))
+        cursor.execute("SELECT user_id, email FROM users WHERE LOWER(email) = LOWER(%s) AND role = 'tutor'", (college_email,))
         user_record = cursor.fetchone()
         if user_record:
             # Link the tutor record to the user account
             now = datetime.now()
             cursor.execute("""
-                UPDATE users SET tutor_id = ?, updated_at = ? WHERE user_id = ?
+                UPDATE users SET tutor_id = %s, updated_at = %s WHERE user_id = %s
             """, (new_id, now, user_record["user_id"]))
             conn.commit()
         else:
@@ -596,12 +438,12 @@ def add_tutor():
             "tutor_id": new_id,
             "linked": user_record is not None
         }), 201
-    except sqlite3.IntegrityError as e:
+    except Exception as e:
         if conn:
             conn.rollback()
         #handles duplicate email constraint
         return jsonify({"error": "Email already exists"}), 400
-    except sqlite3.Error as e:
+    except Exception as e:
         if conn:
             conn.rollback()
         return jsonify({"error": f"Database error: {str(e)}"}), 500
@@ -631,7 +473,7 @@ def get_tutor_list():
     sort_by = request.args.get("sort_by", "default")  # default, price_low, price_high, rating_high, rating_low
     
     conn = get_db_connection()#db conn
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     # Iteration 4 - Build query with filters
     query = "SELECT * FROM tutors WHERE verified = 1"
@@ -639,21 +481,21 @@ def get_tutor_list():
     
     # Module filter
     if module_query:
-        query += " AND modules LIKE ?"
+        query += " AND modules ILIKE %s"
         params.append('%' + module_query + '%')
     
     # Price range filters
     if min_price is not None:
-        query += " AND hourly_rate >= ?"
+        query += " AND hourly_rate >= %s"
         params.append(min_price)
     
     if max_price is not None:
-        query += " AND hourly_rate <= ?"
+        query += " AND hourly_rate <= %s"
         params.append(max_price)
     
     # Rating filter
     if min_rating is not None:
-        query += " AND rating >= ?"
+        query += " AND rating >= %s"
         params.append(min_rating)
     
     # Sorting
@@ -699,7 +541,7 @@ def get_tutor_list():
 def get_unverified_tutors():
     #shows unverified tutors on admin dashboard
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cursor.execute("SELECT * FROM tutors WHERE verified = 0")
     tutors = cursor.fetchall()
     conn.close()
@@ -729,10 +571,10 @@ def get_unverified_tutors():
 def approve_tutor(tutor_id):
     #approves a tutor by setting vefified = 1
     conn = get_db_connection()#db connection
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     # Iteration 2 - Added updated_at timestamp and error handling
     # updated_at timestamp tracks when tutor was approved - useful for admin to see when verification happened
-    cursor.execute("UPDATE tutors SET verified = 1, updated_at = ? WHERE tutor_id = ?", (datetime.now(), tutor_id))#sql query to change id to 1
+    cursor.execute("UPDATE tutors SET verified = 1, updated_at = %s WHERE tutor_id = %s", (datetime.now(), tutor_id))#sql query to change id to 1
     # Iteration 2 - Check if tutor exists
     if cursor.rowcount == 0:
         conn.close()
@@ -748,8 +590,8 @@ def approve_tutor(tutor_id):
 def reject_tutor(tutor_id):
     #rejects a tutor and deleted them from db
     conn = get_db_connection()#db conn
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM tutors WHERE tutor_id = ?", (tutor_id,))##deletes record from db
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute("DELETE FROM tutors WHERE tutor_id = %s", (tutor_id,))##deletes record from db
     # Iteration 2 - Check if tutor exists
     if cursor.rowcount == 0:
         conn.close()
@@ -795,12 +637,12 @@ def create_booking():
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         # Get learner and tutor information for API integrations
-        cursor.execute("SELECT first_name, last_name, college_email FROM students WHERE id = ?", (learner_id,))
+        cursor.execute("SELECT first_name, last_name, college_email FROM students WHERE id = %s", (learner_id,))
         learner = cursor.fetchone()
-        cursor.execute("SELECT first_name, last_name, college_email FROM tutors WHERE tutor_id = ?", (tutor_id,))
+        cursor.execute("SELECT first_name, last_name, college_email FROM tutors WHERE tutor_id = %s", (tutor_id,))
         tutor = cursor.fetchone()
         
         if not learner or not tutor:
@@ -821,7 +663,7 @@ def create_booking():
             # Check if tutor has availability set for this day
             cursor.execute("""
                 SELECT start_time, end_time FROM tutor_availability 
-                WHERE tutor_id = ? AND day_of_week = ? AND is_available = 1
+                WHERE tutor_id = %s AND day_of_week = %s AND is_available = 1
             """, (tutor_id, day_of_week))
             availability = cursor.fetchone()
             
@@ -849,7 +691,7 @@ def create_booking():
                 # Check for conflicts with existing bookings
                 cursor.execute("""
                     SELECT session_time, duration FROM bookings 
-                    WHERE tutor_id = ? AND session_date = ? 
+                    WHERE tutor_id = %s AND session_date = %s 
                     AND status IN ('pending', 'confirmed')
                 """, (tutor_id, session_date))
                 existing_bookings = cursor.fetchall()
@@ -887,10 +729,11 @@ def create_booking():
         # Iteration 4 - Insert booking with module
         cursor.execute("""
             INSERT INTO bookings (learner_id, tutor_id, session_date, session_time, duration, status, module, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, 'pending', %s, %s, %s)
+            RETURNING booking_id
         """, (learner_id, tutor_id, session_date, session_time, duration, module, now, now))
+        new_id = cursor.fetchone()["booking_id"]
         conn.commit()
-        new_id = cursor.lastrowid
         
         # Prepare booking data for API calls
         booking_data = {
@@ -960,7 +803,7 @@ def create_booking():
             "booking_id": new_id,
             "api_integrations": api_results
         }), 201
-    except sqlite3.Error as e:
+    except Exception as e:
         if conn:
             conn.close()
         return jsonify({"error": str(e)}), 400
@@ -979,13 +822,13 @@ def get_tutor_bookings(tutor_id):
     Automatically marks bookings as 'completed' if session time has passed.
     """
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     # Join bookings with students table to get learner info
     cursor.execute("""
         SELECT b.*, s.first_name as learner_first_name, s.last_name as learner_last_name, s.college_email as learner_email
         FROM bookings b
         JOIN students s ON b.learner_id = s.id
-        WHERE b.tutor_id = ?
+        WHERE b.tutor_id = %s
         ORDER BY b.session_date DESC, b.session_time DESC
     """, (tutor_id,))
     bookings = cursor.fetchall()
@@ -1036,8 +879,8 @@ def get_tutor_bookings(tutor_id):
                     if now > session_end:
                         cursor.execute("""
                             UPDATE bookings 
-                            SET status = 'completed', updated_at = ? 
-                            WHERE booking_id = ? AND status IN ('pending', 'confirmed')
+                            SET status = 'completed', updated_at = %s 
+                            WHERE booking_id = %s AND status IN ('pending', 'confirmed')
                         """, (now, booking["booking_id"]))
                         conn.commit()
                 except Exception as e:
@@ -1051,8 +894,8 @@ def get_tutor_bookings(tutor_id):
         SELECT b.*, s.first_name as learner_first_name, s.last_name as learner_last_name, s.college_email as learner_email
         FROM bookings b
         JOIN students s ON b.learner_id = s.id
-        WHERE b.tutor_id = ?
-          AND NOT (b.status = 'cancelled' AND b.updated_at < ?)
+        WHERE b.tutor_id = %s
+          AND NOT (b.status = 'cancelled' AND b.updated_at < %s)
         ORDER BY b.session_date DESC, b.session_time DESC
     """, (tutor_id, twenty_four_hours_ago_str))
     bookings = cursor.fetchall()
@@ -1095,13 +938,13 @@ def get_learner_bookings(learner_id):
     Automatically marks bookings as 'completed' if session time has passed.
     """
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     # Join bookings with tutors table to get tutor info
     cursor.execute("""
         SELECT b.*, t.first_name as tutor_first_name, t.last_name as tutor_last_name, t.modules, t.hourly_rate
         FROM bookings b
         JOIN tutors t ON b.tutor_id = t.tutor_id
-        WHERE b.learner_id = ?
+        WHERE b.learner_id = %s
         ORDER BY b.session_date DESC, b.session_time DESC
     """, (learner_id,))
     bookings = cursor.fetchall()
@@ -1152,8 +995,8 @@ def get_learner_bookings(learner_id):
                     if now > session_end:
                         cursor.execute("""
                             UPDATE bookings 
-                            SET status = 'completed', updated_at = ? 
-                            WHERE booking_id = ? AND status IN ('pending', 'confirmed')
+                            SET status = 'completed', updated_at = %s 
+                            WHERE booking_id = %s AND status IN ('pending', 'confirmed')
                         """, (now, booking["booking_id"]))
                         conn.commit()
                 except Exception as e:
@@ -1167,8 +1010,8 @@ def get_learner_bookings(learner_id):
         SELECT b.*, t.first_name as tutor_first_name, t.last_name as tutor_last_name, t.modules, t.hourly_rate
         FROM bookings b
         JOIN tutors t ON b.tutor_id = t.tutor_id
-        WHERE b.learner_id = ?
-          AND NOT (b.status = 'cancelled' AND b.updated_at < ?)
+        WHERE b.learner_id = %s
+          AND NOT (b.status = 'cancelled' AND b.updated_at < %s)
         ORDER BY b.session_date DESC, b.session_time DESC
     """, (learner_id, twenty_four_hours_ago_str))
     bookings = cursor.fetchall()
@@ -1216,21 +1059,21 @@ def complete_booking(booking_id):
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         # Check if booking exists
-        cursor.execute("SELECT * FROM bookings WHERE booking_id = ?", (booking_id,))
+        cursor.execute("SELECT * FROM bookings WHERE booking_id = %s", (booking_id,))
         booking = cursor.fetchone()
         
         if not booking:
             return jsonify({"error": "Booking not found"}), 404
         
         # Update status to completed
-        cursor.execute("UPDATE bookings SET status = 'completed', updated_at = ? WHERE booking_id = ?", (datetime.now(), booking_id))
+        cursor.execute("UPDATE bookings SET status = 'completed', updated_at = %s WHERE booking_id = %s", (datetime.now(), booking_id))
         conn.commit()
         
         return jsonify({"message": "Booking marked as completed", "booking_id": booking_id}), 200
-    except sqlite3.Error as e:
+    except Exception as e:
         if conn:
             conn.rollback()
         return jsonify({"error": f"Database error: {str(e)}"}), 500
@@ -1250,21 +1093,21 @@ def mark_booking_missed(booking_id):
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         # Check if booking exists
-        cursor.execute("SELECT * FROM bookings WHERE booking_id = ?", (booking_id,))
+        cursor.execute("SELECT * FROM bookings WHERE booking_id = %s", (booking_id,))
         booking = cursor.fetchone()
         
         if not booking:
             return jsonify({"error": "Booking not found"}), 404
         
         # Update status to missed
-        cursor.execute("UPDATE bookings SET status = 'missed', updated_at = ? WHERE booking_id = ?", (datetime.now(), booking_id))
+        cursor.execute("UPDATE bookings SET status = 'missed', updated_at = %s WHERE booking_id = %s", (datetime.now(), booking_id))
         conn.commit()
         
         return jsonify({"message": "Booking marked as missed", "booking_id": booking_id}), 200
-    except sqlite3.Error as e:
+    except Exception as e:
         if conn:
             conn.rollback()
         return jsonify({"error": f"Database error: {str(e)}"}), 500
@@ -1282,17 +1125,17 @@ def cancel_booking(booking_id):
     """
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         # Update status to cancelled and update timestamp
         # updated_at timestamp shows when the booking was cancelled - useful for tracking user activity
-        cursor.execute("UPDATE bookings SET status = 'cancelled', updated_at = ? WHERE booking_id = ?", (datetime.now(), booking_id))
+        cursor.execute("UPDATE bookings SET status = 'cancelled', updated_at = %s WHERE booking_id = %s", (datetime.now(), booking_id))
         if cursor.rowcount == 0:
             conn.close()
             return jsonify({"error": "Booking not found"}), 404
         conn.commit()
         conn.close()
         return jsonify({"message": "Booking cancelled successfully!"}), 200
-    except sqlite3.Error as e:
+    except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
 
 
@@ -1314,13 +1157,13 @@ def reschedule_booking(booking_id):
 
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         # Update booking with new date, time, and status
         # updated_at timestamp shows when the booking was rescheduled - helps track when changes were made
         cursor.execute("""
             UPDATE bookings 
-            SET session_date = ?, session_time = ?, updated_at = ?, status = 'rescheduled'
-            WHERE booking_id = ?
+            SET session_date = %s, session_time = %s, updated_at = %s, status = 'rescheduled'
+            WHERE booking_id = %s
         """, (new_date, new_time, datetime.now(), booking_id))
         if cursor.rowcount == 0:
             conn.close()
@@ -1328,7 +1171,7 @@ def reschedule_booking(booking_id):
         conn.commit()
         conn.close()
         return jsonify({"message": "Booking rescheduled successfully!"}), 200
-    except sqlite3.Error as e:
+    except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
 
 
@@ -1351,7 +1194,7 @@ def get_all_bookings():
     """
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         # Join bookings with both students and tutors tables to get all information
         cursor.execute("""
             SELECT b.*, 
@@ -1416,8 +1259,8 @@ def get_all_bookings():
                         if now > session_end:
                             cursor.execute("""
                                 UPDATE bookings 
-                                SET status = 'completed', updated_at = ? 
-                                WHERE booking_id = ? AND status IN ('pending', 'confirmed')
+                                SET status = 'completed', updated_at = %s 
+                                WHERE booking_id = %s AND status IN ('pending', 'confirmed')
                             """, (now, booking["booking_id"]))
                             conn.commit()
                             completed_count += 1
@@ -1434,7 +1277,7 @@ def get_all_bookings():
             FROM bookings b
             JOIN students s ON b.learner_id = s.id
             JOIN tutors t ON b.tutor_id = t.tutor_id
-            WHERE NOT (b.status = 'cancelled' AND b.updated_at < ?)
+            WHERE NOT (b.status = 'cancelled' AND b.updated_at < %s)
             ORDER BY b.created_at DESC
         """, (twenty_four_hours_ago_str,))
         bookings = cursor.fetchall()
@@ -1469,7 +1312,7 @@ def get_all_bookings():
             for b in bookings
         ]
         return jsonify(booking_list)
-    except sqlite3.Error as e:
+    except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
 # End Story 9 - Admin view all bookings
 
@@ -1483,7 +1326,7 @@ def generate_platform_report():
     """
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         report = {
             "generated_at": datetime.now().isoformat(),
@@ -1558,7 +1401,7 @@ def generate_platform_report():
         thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
         cursor.execute("""
             SELECT COUNT(*) as count FROM bookings 
-            WHERE created_at >= ?
+            WHERE created_at >= %s
         """, (thirty_days_ago,))
         bookings_last_30_days = cursor.fetchone()["count"]
         
@@ -1566,7 +1409,7 @@ def generate_platform_report():
         seven_days_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
         cursor.execute("""
             SELECT COUNT(*) as count FROM bookings 
-            WHERE created_at >= ?
+            WHERE created_at >= %s
         """, (seven_days_ago,))
         bookings_last_7_days = cursor.fetchone()["count"]
         
@@ -1733,7 +1576,7 @@ def generate_platform_report():
         cursor.execute("""
             SELECT COUNT(*) as count FROM bookings 
             WHERE status IN ('confirmed', 'accepted', 'pending')
-            AND session_date >= date('now')
+            AND session_date >= CURRENT_DATE
         """)
         active_bookings = cursor.fetchone()["count"]
         
@@ -1775,7 +1618,7 @@ def generate_platform_report():
         conn.close()
         return jsonify(report), 200
         
-    except sqlite3.Error as e:
+    except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
     except Exception as e:
         return jsonify({"error": f"Error generating report: {str(e)}"}), 500
@@ -1817,16 +1660,16 @@ def create_review():
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         # Check if booking exists and belongs to this learner
-        cursor.execute("SELECT * FROM bookings WHERE booking_id = ? AND learner_id = ?", (booking_id, learner_id))
+        cursor.execute("SELECT * FROM bookings WHERE booking_id = %s AND learner_id = %s", (booking_id, learner_id))
         booking = cursor.fetchone()
         if not booking:
             return jsonify({"error": "Booking not found or does not belong to this learner"}), 404
         
         # Check if a review already exists for this booking
-        cursor.execute("SELECT review_id FROM reviews WHERE booking_id = ?", (booking_id,))
+        cursor.execute("SELECT review_id FROM reviews WHERE booking_id = %s", (booking_id,))
         existing_review = cursor.fetchone()
         if existing_review:
             return jsonify({"error": "A review already exists for this booking"}), 400
@@ -1871,19 +1714,20 @@ def create_review():
         now = datetime.now()
         cursor.execute("""
             INSERT INTO reviews (booking_id, learner_id, tutor_id, rating, comment, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING review_id
         """, (booking_id, learner_id, tutor_id, rating, comment, now))
-        
+
+        review_id = cursor.fetchone()["review_id"]
         # Commit the transaction to save the review to the database
         conn.commit()
-        review_id = cursor.lastrowid
         
         
         return jsonify({
             "message": "Review submitted successfully",
             "review_id": review_id
         }), 201
-    except sqlite3.Error as e:
+    except Exception as e:
         if conn:
             conn.rollback()
         return jsonify({"error": f"Database error: {str(e)}"}), 500
@@ -1907,9 +1751,9 @@ def get_review_for_booking(booking_id):
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
-        cursor.execute("SELECT * FROM reviews WHERE booking_id = ?", (booking_id,))
+        cursor.execute("SELECT * FROM reviews WHERE booking_id = %s", (booking_id,))
         review = cursor.fetchone()
         
         if not review:
@@ -1922,7 +1766,7 @@ def get_review_for_booking(booking_id):
             "comment": review["comment"],
             "created_at": review["created_at"]
         }), 200
-    except sqlite3.Error as e:
+    except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
     finally:
         if conn:
@@ -1939,7 +1783,7 @@ def get_all_users():
     """
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         # Get all users with their linked student/tutor information
         cursor.execute("""
@@ -1991,7 +1835,7 @@ def get_all_users():
             })
         
         return jsonify(user_list), 200
-    except sqlite3.Error as e:
+    except Exception as e:
         if conn:
             conn.close()
         return jsonify({"error": f"Database error: {str(e)}"}), 500
@@ -2022,10 +1866,10 @@ def change_admin_password():
             return jsonify({"error": "New password must be at least 6 characters long"}), 400
         
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         # Find user by email
-        cursor.execute("SELECT * FROM users WHERE LOWER(email) = LOWER(?) AND role = 'admin'", (email,))
+        cursor.execute("SELECT * FROM users WHERE LOWER(email) = LOWER(%s) AND role = 'admin'", (email,))
         user = cursor.fetchone()
         
         if not user:
@@ -2047,8 +1891,8 @@ def change_admin_password():
         now = datetime.now()
         cursor.execute("""
             UPDATE users 
-            SET password = ?, updated_at = ?
-            WHERE user_id = ?
+            SET password = %s, updated_at = %s
+            WHERE user_id = %s
         """, (new_password_hash, now, user["user_id"]))
         conn.commit()
         conn.close()
@@ -2058,7 +1902,7 @@ def change_admin_password():
             "user_id": user["user_id"],
             "email": user["email"]
         }), 200
-    except sqlite3.Error as e:
+    except Exception as e:
         if conn:
             conn.rollback()
             conn.close()
@@ -2088,10 +1932,10 @@ def update_user_status(user_id):
         is_active = 1 if is_active else 0
         
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         # Check if user exists
-        cursor.execute("SELECT user_id, email, role FROM users WHERE user_id = ?", (user_id,))
+        cursor.execute("SELECT user_id, email, role FROM users WHERE user_id = %s", (user_id,))
         user = cursor.fetchone()
         
         if not user:
@@ -2107,8 +1951,8 @@ def update_user_status(user_id):
         now = datetime.now()
         cursor.execute("""
             UPDATE users 
-            SET is_active = ?, updated_at = ?
-            WHERE user_id = ?
+            SET is_active = %s, updated_at = %s
+            WHERE user_id = %s
         """, (is_active, now, user_id))
         conn.commit()
         conn.close()
@@ -2120,7 +1964,7 @@ def update_user_status(user_id):
             "email": user["email"],
             "is_active": is_active
         }), 200
-    except sqlite3.Error as e:
+    except Exception as e:
         if conn:
             conn.rollback()
             conn.close()
@@ -2143,7 +1987,7 @@ def get_all_reviews():
     """
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         # Join reviews with bookings, students, and tutors tables to get all information
         cursor.execute("""
             SELECT r.*, 
@@ -2174,7 +2018,7 @@ def get_all_reviews():
             for r in reviews
         ]
         return jsonify(review_list)
-    except sqlite3.Error as e:
+    except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
 # End Story 9 - Admin reviews
 
@@ -2190,10 +2034,10 @@ def serve_proof_document(tutor_id):
     """
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         # Get proof_doc BLOB from database
-        cursor.execute("SELECT proof_doc FROM tutors WHERE tutor_id = ?", (tutor_id,))
+        cursor.execute("SELECT proof_doc FROM tutors WHERE tutor_id = %s", (tutor_id,))
         tutor = cursor.fetchone()
         conn.close()
         
@@ -2212,8 +2056,8 @@ def serve_proof_document(tutor_id):
         elif isinstance(proof_doc, str):
             # If stored as filename string, try to read from filesystem
             try:
-                file_path = UPLOADS_DIR / proof_doc
-                if file_path.exists():
+                file_path = os.path.join(UPLOADS_DIR, proof_doc)
+                if os.path.exists(file_path):
                     with open(file_path, 'rb') as f:
                         file_data = f.read()
                 else:
@@ -2250,7 +2094,7 @@ def serve_proof_document(tutor_id):
         response.headers['Access-Control-Allow-Origin'] = '*'
         response.headers['Access-Control-Allow-Methods'] = 'GET'
         return response
-    except sqlite3.Error as e:
+    except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
     except Exception as e:
         return jsonify({"error": f"Error serving file: {str(e)}"}), 500
@@ -2281,10 +2125,10 @@ def get_tutor_by_id(tutor_id):
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         # Get tutor by ID (no verification filter - tutors can edit their own profile)
-        cursor.execute("SELECT * FROM tutors WHERE tutor_id = ?", (tutor_id,))
+        cursor.execute("SELECT * FROM tutors WHERE tutor_id = %s", (tutor_id,))
         tutor = cursor.fetchone()
         
         if not tutor:
@@ -2308,7 +2152,7 @@ def get_tutor_by_id(tutor_id):
         }
         
         return jsonify(tutor_data), 200
-    except sqlite3.Error as e:
+    except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
     finally:
         if conn:
@@ -2325,10 +2169,10 @@ def get_tutor_profile(tutor_id):
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         # Get tutor information
-        cursor.execute("SELECT * FROM tutors WHERE tutor_id = ? AND verified = 1", (tutor_id,))
+        cursor.execute("SELECT * FROM tutors WHERE tutor_id = %s AND verified = 1", (tutor_id,))
         tutor = cursor.fetchone()
         
         if not tutor:
@@ -2344,7 +2188,7 @@ def get_tutor_profile(tutor_id):
             FROM reviews r
             JOIN students s ON r.learner_id = s.id
             LEFT JOIN bookings b ON r.booking_id = b.booking_id
-            WHERE r.tutor_id = ?
+            WHERE r.tutor_id = %s
             ORDER BY r.created_at DESC
         """, (tutor_id,))
         reviews = cursor.fetchall()
@@ -2364,7 +2208,7 @@ def get_tutor_profile(tutor_id):
                 SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_bookings,
                 SUM(CASE WHEN status = 'confirmed' OR status = 'accepted' THEN 1 ELSE 0 END) as confirmed_bookings
             FROM bookings
-            WHERE tutor_id = ?
+            WHERE tutor_id = %s
         """, (tutor_id,))
         booking_stats = cursor.fetchone()
         
@@ -2409,7 +2253,7 @@ def get_tutor_profile(tutor_id):
         }
         
         return jsonify(profile_data), 200
-    except sqlite3.Error as e:
+    except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
     except Exception as e:
         import traceback
@@ -2447,12 +2291,12 @@ def update_tutor_profile(tutor_id):
 
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         # Update tutor information with new timestamp
         cursor.execute("""
             UPDATE tutors 
-            SET modules = ?, hourly_rate = ?, bio = ?, updated_at = ?
-            WHERE tutor_id = ?
+            SET modules = %s, hourly_rate = %s, bio = %s, updated_at = %s
+            WHERE tutor_id = %s
         """, (modules, hourly_rate, bio, datetime.now(), tutor_id))
         
         # Check if tutor exists
@@ -2463,7 +2307,7 @@ def update_tutor_profile(tutor_id):
         conn.commit()
         conn.close()
         return jsonify({"message": "Tutor profile updated successfully!"}), 200
-    except sqlite3.Error as e:
+    except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
 # End Story 10 - Update tutor profile
 
@@ -2512,17 +2356,17 @@ def set_tutor_availability(tutor_id):
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         # Check if tutor exists
-        cursor.execute("SELECT tutor_id FROM tutors WHERE tutor_id = ?", (tutor_id,))
+        cursor.execute("SELECT tutor_id FROM tutors WHERE tutor_id = %s", (tutor_id,))
         if not cursor.fetchone():
             return jsonify({"error": "Tutor not found"}), 404
         
         # Check if availability already exists for this day
         cursor.execute("""
             SELECT availability_id FROM tutor_availability 
-            WHERE tutor_id = ? AND day_of_week = ?
+            WHERE tutor_id = %s AND day_of_week = %s
         """, (tutor_id, day_of_week))
         existing = cursor.fetchone()
         
@@ -2531,19 +2375,19 @@ def set_tutor_availability(tutor_id):
             # Update existing availability
             cursor.execute("""
                 UPDATE tutor_availability 
-                SET start_time = ?, end_time = ?, is_available = ?, updated_at = ?
-                WHERE tutor_id = ? AND day_of_week = ?
+                SET start_time = %s, end_time = %s, is_available = %s, updated_at = %s
+                WHERE tutor_id = %s AND day_of_week = %s
             """, (start_time, end_time, is_available, now, tutor_id, day_of_week))
         else:
             # Insert new availability
             cursor.execute("""
                 INSERT INTO tutor_availability (tutor_id, day_of_week, start_time, end_time, is_available, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
             """, (tutor_id, day_of_week, start_time, end_time, is_available, now, now))
         
         conn.commit()
         return jsonify({"message": "Availability updated successfully"}), 200
-    except sqlite3.Error as e:
+    except Exception as e:
         if conn:
             conn.rollback()
         return jsonify({"error": f"Database error: {str(e)}"}), 500
@@ -2560,11 +2404,11 @@ def get_tutor_availability(tutor_id):
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         cursor.execute("""
             SELECT * FROM tutor_availability 
-            WHERE tutor_id = ? AND is_available = 1
+            WHERE tutor_id = %s AND is_available = 1
             ORDER BY day_of_week, start_time
         """, (tutor_id,))
         
@@ -2582,7 +2426,7 @@ def get_tutor_availability(tutor_id):
         ]
         
         return jsonify(availability_list), 200
-    except sqlite3.Error as e:
+    except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
     finally:
         if conn:
@@ -2612,12 +2456,12 @@ def get_available_slots(tutor_id):
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         # Get tutor's availability for this day of week
         cursor.execute("""
             SELECT start_time, end_time FROM tutor_availability 
-            WHERE tutor_id = ? AND day_of_week = ? AND is_available = 1
+            WHERE tutor_id = %s AND day_of_week = %s AND is_available = 1
         """, (tutor_id, day_of_week))
         
         availability = cursor.fetchone()
@@ -2639,7 +2483,7 @@ def get_available_slots(tutor_id):
         # Get existing bookings for this date
         cursor.execute("""
             SELECT session_time, duration FROM bookings 
-            WHERE tutor_id = ? AND session_date = ? AND status IN ('pending', 'confirmed')
+            WHERE tutor_id = %s AND session_date = %s AND status IN ('pending', 'confirmed')
         """, (tutor_id, date_str))
         
         existing_bookings = cursor.fetchall()
@@ -2686,7 +2530,7 @@ def get_available_slots(tutor_id):
                 "end_time": end_time_str
             }
         }), 200
-    except sqlite3.Error as e:
+    except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
     except Exception as e:
         return jsonify({"error": f"Error generating slots: {str(e)}"}), 500
@@ -2704,10 +2548,10 @@ def accept_booking(booking_id):
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         # Check if booking exists and is pending
-        cursor.execute("SELECT * FROM bookings WHERE booking_id = ?", (booking_id,))
+        cursor.execute("SELECT * FROM bookings WHERE booking_id = %s", (booking_id,))
         booking = cursor.fetchone()
         
         if not booking:
@@ -2719,13 +2563,13 @@ def accept_booking(booking_id):
         # Update status to confirmed
         cursor.execute("""
             UPDATE bookings 
-            SET status = 'confirmed', updated_at = ?
-            WHERE booking_id = ?
+            SET status = 'confirmed', updated_at = %s
+            WHERE booking_id = %s
         """, (datetime.now(), booking_id))
         
         conn.commit()
         return jsonify({"message": "Booking accepted successfully", "booking_id": booking_id}), 200
-    except sqlite3.Error as e:
+    except Exception as e:
         if conn:
             conn.rollback()
         return jsonify({"error": f"Database error: {str(e)}"}), 500
@@ -2743,10 +2587,10 @@ def deny_booking(booking_id):
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         # Check if booking exists and is pending
-        cursor.execute("SELECT * FROM bookings WHERE booking_id = ?", (booking_id,))
+        cursor.execute("SELECT * FROM bookings WHERE booking_id = %s", (booking_id,))
         booking = cursor.fetchone()
         
         if not booking:
@@ -2758,13 +2602,13 @@ def deny_booking(booking_id):
         # Update status to cancelled
         cursor.execute("""
             UPDATE bookings 
-            SET status = 'cancelled', updated_at = ?
-            WHERE booking_id = ?
+            SET status = 'cancelled', updated_at = %s
+            WHERE booking_id = %s
         """, (datetime.now(), booking_id))
         
         conn.commit()
         return jsonify({"message": "Booking denied successfully", "booking_id": booking_id}), 200
-    except sqlite3.Error as e:
+    except Exception as e:
         if conn:
             conn.rollback()
         return jsonify({"error": f"Database error: {str(e)}"}), 500
@@ -2796,10 +2640,10 @@ def send_message(booking_id):
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         # Check if booking exists and is confirmed/accepted
-        cursor.execute("SELECT * FROM bookings WHERE booking_id = ?", (booking_id,))
+        cursor.execute("SELECT * FROM bookings WHERE booking_id = %s", (booking_id,))
         booking = cursor.fetchone()
         
         if not booking:
@@ -2821,18 +2665,19 @@ def send_message(booking_id):
         now = datetime.now()
         cursor.execute("""
             INSERT INTO messages (booking_id, sender_id, sender_role, message_text, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING message_id
         """, (booking_id, sender_id, sender_role, message_text, now))
-        
+
+        message_id = cursor.fetchone()["message_id"]
         conn.commit()
-        message_id = cursor.lastrowid
-        
+
         return jsonify({
             "message": "Message sent successfully",
             "message_id": message_id,
             "booking_id": booking_id
         }), 201
-    except sqlite3.Error as e:
+    except Exception as e:
         if conn:
             conn.rollback()
         return jsonify({"error": f"Database error: {str(e)}"}), 500
@@ -2861,10 +2706,10 @@ def get_booking_messages(booking_id):
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         # Check if booking exists
-        cursor.execute("SELECT * FROM bookings WHERE booking_id = ?", (booking_id,))
+        cursor.execute("SELECT * FROM bookings WHERE booking_id = %s", (booking_id,))
         booking = cursor.fetchone()
         
         if not booking:
@@ -2883,7 +2728,7 @@ def get_booking_messages(booking_id):
             SELECT message_id, booking_id, sender_id, sender_role, message_text, 
                    read_at, created_at
             FROM messages
-            WHERE booking_id = ?
+            WHERE booking_id = %s
             ORDER BY created_at ASC
         """, (booking_id,))
         
@@ -2904,7 +2749,7 @@ def get_booking_messages(booking_id):
         ]
         
         return jsonify(message_list), 200
-    except sqlite3.Error as e:
+    except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
     finally:
         if conn:
@@ -2930,20 +2775,20 @@ def get_user_messages():
         
         conn = None
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         # Get all bookings for this user
         if user_role == 'learner':
             cursor.execute("""
                 SELECT booking_id, tutor_id, session_date, session_time, status, module
                 FROM bookings
-                WHERE learner_id = ? AND status IN ('confirmed', 'accepted')
+                WHERE learner_id = %s AND status IN ('confirmed', 'accepted')
             """, (user_id,))
         else:  # user_role == 'tutor'
             cursor.execute("""
                 SELECT booking_id, learner_id, session_date, session_time, status, module
                 FROM bookings
-                WHERE tutor_id = ? AND status IN ('confirmed', 'accepted')
+                WHERE tutor_id = %s AND status IN ('confirmed', 'accepted')
             """, (user_id,))
         
         bookings = cursor.fetchall()
@@ -2958,7 +2803,7 @@ def get_user_messages():
         if not booking_ids:
             return jsonify([]), 200
         
-        placeholders = ','.join(['?'] * len(booking_ids))
+        placeholders = ','.join(['%s'] * len(booking_ids))
         
         cursor.execute(f"""
             SELECT m.message_id, m.booking_id, m.sender_id, m.sender_role, 
@@ -2989,13 +2834,13 @@ def get_user_messages():
                     cursor.execute("""
                         SELECT first_name, last_name, college_email
                         FROM tutors
-                        WHERE tutor_id = (SELECT tutor_id FROM bookings WHERE booking_id = ?)
+                        WHERE tutor_id = (SELECT tutor_id FROM bookings WHERE booking_id = %s)
                     """, (booking_id,))
                 else:  # user_role == 'tutor'
                     cursor.execute("""
                         SELECT first_name, last_name, college_email
                         FROM students
-                        WHERE id = (SELECT learner_id FROM bookings WHERE booking_id = ?)
+                        WHERE id = (SELECT learner_id FROM bookings WHERE booking_id = %s)
                     """, (booking_id,))
                 
                 other_party = cursor.fetchone()
@@ -3030,7 +2875,7 @@ def get_user_messages():
         result = list(booking_groups.values())
         
         return jsonify(result), 200
-    except sqlite3.Error as e:
+    except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
     except Exception as e:
         return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
@@ -3049,7 +2894,7 @@ def get_learner_earnings(learner_id):
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         # Get all completed bookings for this learner
         cursor.execute("""
@@ -3057,7 +2902,7 @@ def get_learner_earnings(learner_id):
                    t.first_name as tutor_first_name, t.last_name as tutor_last_name, t.hourly_rate
             FROM bookings b
             JOIN tutors t ON b.tutor_id = t.tutor_id
-            WHERE b.learner_id = ? AND b.status = 'completed'
+            WHERE b.learner_id = %s AND b.status = 'completed'
             ORDER BY b.session_date DESC, b.session_time DESC
         """, (learner_id,))
         
@@ -3109,7 +2954,7 @@ def get_learner_earnings(learner_id):
         cursor.execute("""
             SELECT COUNT(*) as count
             FROM bookings
-            WHERE learner_id = ? AND status IN ('pending', 'confirmed', 'accepted')
+            WHERE learner_id = %s AND status IN ('pending', 'confirmed', 'accepted')
         """, (learner_id,))
         pending_count = cursor.fetchone()["count"]
         
@@ -3123,7 +2968,7 @@ def get_learner_earnings(learner_id):
         }
         
         return jsonify(result), 200
-    except sqlite3.Error as e:
+    except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
     except Exception as e:
         return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
@@ -3142,10 +2987,10 @@ def get_tutor_earnings(tutor_id):
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         # Get tutor's hourly rate
-        cursor.execute("SELECT hourly_rate FROM tutors WHERE tutor_id = ?", (tutor_id,))
+        cursor.execute("SELECT hourly_rate FROM tutors WHERE tutor_id = %s", (tutor_id,))
         tutor = cursor.fetchone()
         
         if not tutor:
@@ -3159,7 +3004,7 @@ def get_tutor_earnings(tutor_id):
                    s.first_name as learner_first_name, s.last_name as learner_last_name
             FROM bookings b
             JOIN students s ON b.learner_id = s.id
-            WHERE b.tutor_id = ? AND b.status = 'completed'
+            WHERE b.tutor_id = %s AND b.status = 'completed'
             ORDER BY b.session_date DESC, b.session_time DESC
         """, (tutor_id,))
         
@@ -3202,7 +3047,7 @@ def get_tutor_earnings(tutor_id):
         cursor.execute("""
             SELECT COUNT(*) as count
             FROM bookings
-            WHERE tutor_id = ? AND status IN ('pending', 'confirmed', 'accepted')
+            WHERE tutor_id = %s AND status IN ('pending', 'confirmed', 'accepted')
         """, (tutor_id,))
         pending_count = cursor.fetchone()["count"]
         
@@ -3217,7 +3062,7 @@ def get_tutor_earnings(tutor_id):
         }
         
         return jsonify(result), 200
-    except sqlite3.Error as e:
+    except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
     except Exception as e:
         return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
@@ -3235,10 +3080,10 @@ def mark_message_read(message_id):
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         # Check if message exists
-        cursor.execute("SELECT * FROM messages WHERE message_id = ?", (message_id,))
+        cursor.execute("SELECT * FROM messages WHERE message_id = %s", (message_id,))
         message = cursor.fetchone()
         
         if not message:
@@ -3247,13 +3092,13 @@ def mark_message_read(message_id):
         # Update read_at timestamp
         cursor.execute("""
             UPDATE messages 
-            SET read_at = ?
-            WHERE message_id = ?
+            SET read_at = %s
+            WHERE message_id = %s
         """, (datetime.now(), message_id))
         
         conn.commit()
         return jsonify({"message": "Message marked as read", "message_id": message_id}), 200
-    except sqlite3.Error as e:
+    except Exception as e:
         if conn:
             conn.rollback()
         return jsonify({"error": f"Database error: {str(e)}"}), 500
@@ -3313,7 +3158,7 @@ def register_user():
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         # Simple password hashing (in production, use bcrypt or similar)
         # For now, we'll store a basic hash (this is NOT secure for production!)
@@ -3335,10 +3180,11 @@ def register_user():
             now = datetime.now()
             cursor.execute("""
                 INSERT INTO students (first_name, last_name, college_email, modules, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING id
             """, (first_name, last_name, email, modules, now, now))
-            created_student_id = cursor.lastrowid
-        
+            created_student_id = cursor.fetchone()["id"]
+
         # Story 11 - Note: Tutors need to complete tutor signup separately to get tutor_id
         # We don't auto-create tutor records here because tutors need to provide modules, rates, etc.
         
@@ -3346,12 +3192,13 @@ def register_user():
         now = datetime.now()
         cursor.execute("""
             INSERT INTO users (email, password, role, student_id, tutor_id, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING user_id
         """, (email, password_hash, role, created_student_id, tutor_id, now, now))
-        
+
+        new_id = cursor.fetchone()["user_id"]
         conn.commit()
-        new_id = cursor.lastrowid
-        
+
         return jsonify({
             "message": "User registered successfully!",
             "user_id": new_id,
@@ -3359,11 +3206,11 @@ def register_user():
             "role": role,
             "student_id": created_student_id
         }), 201
-    except sqlite3.IntegrityError:
+    except Exception:
         if conn:
             conn.rollback()
         return jsonify({"error": "Email already exists"}), 400
-    except sqlite3.Error as e:
+    except Exception as e:
         if conn:
             conn.rollback()
         return jsonify({"error": f"Database error: {str(e)}"}), 500
@@ -3394,10 +3241,10 @@ def login_user():
     conn = None
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         # Find user by email (case-insensitive)
-        cursor.execute("SELECT * FROM users WHERE LOWER(email) = LOWER(?)", (email,))
+        cursor.execute("SELECT * FROM users WHERE LOWER(email) = LOWER(%s)", (email,))
         user = cursor.fetchone()
         
         if not user:
@@ -3433,12 +3280,13 @@ def login_user():
             now = datetime.now()
             cursor.execute("""
                 INSERT INTO students (first_name, last_name, college_email, modules, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING id
             """, (email_name, "", user["email"], "", now, now))
-            student_id = cursor.lastrowid
+            student_id = cursor.fetchone()["id"]
             # Update user record with student_id
             cursor.execute("""
-                UPDATE users SET student_id = ?, updated_at = ? WHERE user_id = ?
+                UPDATE users SET student_id = %s, updated_at = %s WHERE user_id = %s
             """, (student_id, now, user["user_id"]))
             conn.commit()
         
@@ -3447,14 +3295,14 @@ def login_user():
         tutor_id = user["tutor_id"]
         if user["role"] == 'tutor' and not tutor_id:
             # Try to find a tutor record with matching email (case-insensitive)
-            cursor.execute("SELECT tutor_id, college_email FROM tutors WHERE LOWER(college_email) = LOWER(?)", (user["email"],))
+            cursor.execute("SELECT tutor_id, college_email FROM tutors WHERE LOWER(college_email) = LOWER(%s)", (user["email"],))
             tutor_record = cursor.fetchone()
             if tutor_record:
                 tutor_id = tutor_record["tutor_id"]
                 # Update user record with tutor_id
                 now = datetime.now()
                 cursor.execute("""
-                    UPDATE users SET tutor_id = ?, updated_at = ? WHERE user_id = ?
+                    UPDATE users SET tutor_id = %s, updated_at = %s WHERE user_id = %s
                 """, (tutor_id, now, user["user_id"]))
                 conn.commit()
             else:
@@ -3462,7 +3310,7 @@ def login_user():
                 all_tutors = cursor.fetchall()
         
         # Refresh user data from database to get latest tutor_id/student_id after any updates
-        cursor.execute("SELECT student_id, tutor_id FROM users WHERE user_id = ?", (user["user_id"],))
+        cursor.execute("SELECT student_id, tutor_id FROM users WHERE user_id = %s", (user["user_id"],))
         updated_user = cursor.fetchone()
         final_student_id = updated_user["student_id"] if updated_user else student_id
         final_tutor_id = updated_user["tutor_id"] if updated_user else tutor_id
@@ -3476,7 +3324,7 @@ def login_user():
             "student_id": final_student_id,
             "tutor_id": final_tutor_id
         }), 200
-    except sqlite3.Error as e:
+    except Exception as e:
         if conn:
             conn.rollback()
         return jsonify({"error": f"Database error: {str(e)}"}), 500
@@ -3599,9 +3447,5 @@ def test_google_calendar_api():
 # RUN LOCALLY PORT 5000
 #app entry point
 if __name__ == '__main__':
-    print("=" * 50)
-    print("Starting Flask server...")
-    print("Server will be available at: http://127.0.0.1:5000")
-    print("Health check: http://127.0.0.1:5000/api/health")
-    print("=" * 50)
-    app.run(debug=True, port=5000, host='127.0.0.1')
+    port = int(os.environ.get('PORT', 5000))
+    app.run(debug=False, port=port, host='0.0.0.0')

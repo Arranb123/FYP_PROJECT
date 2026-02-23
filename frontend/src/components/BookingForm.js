@@ -57,7 +57,7 @@ const BookingForm = ({ tutor, learnerId, onClose, onSuccess }) => {
     
     try {
       const response = await axios.get(
-        `http://127.0.0.1:5000/api/tutors/${tutor.tutor_id}/available-slots?date=${formState.session_date}`
+        `${process.env.REACT_APP_API_URL}/api/tutors/${tutor.tutor_id}/available-slots?date=${formState.session_date}`
       );
       
       if (response.data.available_slots && response.data.available_slots.length > 0) {
@@ -123,7 +123,7 @@ const BookingForm = ({ tutor, learnerId, onClose, onSuccess }) => {
     try {
       // Send booking data to backend API
       // This creates the booking in the database
-      const response = await axios.post("http://127.0.0.1:5000/api/bookings", {
+      const response = await axios.post("${process.env.REACT_APP_API_URL}/api/bookings", {
         learner_id: learnerId, // Who is booking
         tutor_id: tutor.tutor_id, // Who they're booking with
         session_date: formState.session_date, // When the session is

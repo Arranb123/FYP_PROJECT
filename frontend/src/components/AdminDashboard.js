@@ -61,7 +61,7 @@ function AdminDashboard({ onLogout, currentUser }) {
   //store unverified tutors retrieved from the backend
   const [tutors, setTutors] = useState([]);
     //  endpoint for unverified tutor list
-  const API_URL = "http://127.0.0.1:5000/api/tutors/unverified";
+  const API_URL = "${process.env.REACT_APP_API_URL}/api/tutors/unverified";
   const [tutorsCurrentPage, setTutorsCurrentPage] = useState(1);
   const TUTORS_PER_PAGE = 10;
   
@@ -138,7 +138,7 @@ function AdminDashboard({ onLogout, currentUser }) {
   // Approve tutor (set verified = 1)
   const handleApprove = async (id) => { //called when admin presses approve
     try {
-      await axios.put(`http://127.0.0.1:5000/api/tutors/${id}/verify`);//sends a request to flask route
+      await axios.put(`${process.env.REACT_APP_API_URL}/api/tutors/${id}/verify`);//sends a request to flask route
       if (window.showToast) {
         window.showToast("Tutor approved successfully!", "success", 3000);
       } else {
@@ -158,7 +158,7 @@ function AdminDashboard({ onLogout, currentUser }) {
   const handleReject = async (id) => {  //called if reject is called 
     if (!window.confirm("Are you sure you want to reject this tutor?")) return; //confirm button
     try {
-      await axios.delete(`http://127.0.0.1:5000/api/tutors/${id}`); //sends request to delete and its gone then
+      await axios.delete(`${process.env.REACT_APP_API_URL}/api/tutors/${id}`); //sends request to delete and its gone then
       if (window.showToast) {
         window.showToast("Tutor rejected and removed!", "success", 3000);
       } else {
@@ -178,7 +178,7 @@ function AdminDashboard({ onLogout, currentUser }) {
   const generateReport = async () => {
     setLoadingReport(true);
     try {
-      const response = await axios.get("http://127.0.0.1:5000/api/admin/report");
+      const response = await axios.get("${process.env.REACT_APP_API_URL}/api/admin/report");
       setReport(response.data);
     } catch (error) {
       console.error("Error generating report:", error);
@@ -208,7 +208,7 @@ function AdminDashboard({ onLogout, currentUser }) {
     setLoadingUsers(true);
     setUsersError("");
     try {
-      const response = await axios.get("http://127.0.0.1:5000/api/admin/users");
+      const response = await axios.get("${process.env.REACT_APP_API_URL}/api/admin/users");
       setUsers(response.data);
     } catch (error) {
       setUsersError(error?.response?.data?.error || "Failed to load users. Please try again.");
@@ -247,7 +247,7 @@ function AdminDashboard({ onLogout, currentUser }) {
     
     setChangingPassword(true);
     try {
-      await axios.put('http://127.0.0.1:5000/api/admin/change-password', {
+      await axios.put('${process.env.REACT_APP_API_URL}/api/admin/change-password', {
         email: currentUser?.email,
         current_password: passwordForm.current_password,
         new_password: passwordForm.new_password
@@ -283,7 +283,7 @@ function AdminDashboard({ onLogout, currentUser }) {
   // Iteration 4 - Update user status (activate/deactivate)
   const updateUserStatus = async (userId, isActive) => {
     try {
-      const response = await axios.put(`http://127.0.0.1:5000/api/admin/users/${userId}/status`, {
+      const response = await axios.put(`${process.env.REACT_APP_API_URL}/api/admin/users/${userId}/status`, {
         is_active: isActive
       });
       
@@ -1221,7 +1221,7 @@ function AdminDashboard({ onLogout, currentUser }) {
               <div className="modal-body p-0" style={{ height: '70vh' }}>
                 {/* file reference: https://developer.mozilla.org/en-US/docs/Web/HTML/Element/iframe (lines 272-280) */}
                 <iframe
-                  src={`http://127.0.0.1:5000/api/tutors/${viewingDocument}/proof-doc`}
+                  src={`${process.env.REACT_APP_API_URL}/api/tutors/${viewingDocument}/proof-doc`}
                   style={{ 
                     width: '100%', 
                     height: '100%', 
@@ -1232,7 +1232,7 @@ function AdminDashboard({ onLogout, currentUser }) {
               </div>
               <div className="modal-footer">
                 <a
-                  href={`http://127.0.0.1:5000/api/tutors/${viewingDocument}/proof-doc`}
+                  href={`${process.env.REACT_APP_API_URL}/api/tutors/${viewingDocument}/proof-doc`}
                   download
                   className="btn btn-primary me-2"
                 >
@@ -1290,7 +1290,7 @@ const AdminAllBookings = () => {
     setLoading(true);
     setError("");
     try {
-      const res = await axios.get("http://127.0.0.1:5000/api/admin/bookings");
+      const res = await axios.get("${process.env.REACT_APP_API_URL}/api/admin/bookings");
       setBookings(res.data);
     } catch (err) {
       setError(err?.response?.data?.error || "Failed to load bookings");
@@ -1470,7 +1470,7 @@ const AdminAllReviews = () => {
     setLoading(true);
     setError("");
     try {
-      const res = await axios.get("http://127.0.0.1:5000/api/admin/reviews");
+      const res = await axios.get("${process.env.REACT_APP_API_URL}/api/admin/reviews");
       setReviews(res.data);
     } catch (err) {
       setError(err?.response?.data?.error || "Failed to load reviews");

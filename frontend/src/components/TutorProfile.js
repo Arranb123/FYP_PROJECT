@@ -17,7 +17,7 @@ const TutorProfile = ({ tutorId, learnerId, onClose }) => {
     setLoading(true);
     setError("");
     try {
-      const response = await axios.get(`http://127.0.0.1:5000/api/tutors/${tutorId}/profile`);
+      const response = await axios.get(`${process.env.REACT_APP_API_URL}/api/tutors/${tutorId}/profile`);
       setProfile(response.data);
     } catch (err) {
       const message = err?.response?.data?.error || err?.message || "Failed to load tutor profile.";

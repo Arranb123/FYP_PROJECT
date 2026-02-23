@@ -65,7 +65,7 @@ const Login = ({ onLoginSuccess, onBack, onNavigateToRegister }) => {
 
     setSubmitting(true);
     try {
-      const response = await axios.post("http://127.0.0.1:5000/api/auth/login", {
+      const response = await axios.post("${process.env.REACT_APP_API_URL}/api/auth/login", {
         email: formData.email,
         password: formData.password,
       });

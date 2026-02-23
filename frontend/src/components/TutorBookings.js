@@ -56,7 +56,7 @@ const TutorBookings = ({ tutorId }) => {
     try {
       // Get all bookings for this tutor from backend
       // Backend returns bookings with learner names and emails
-      const response = await axios.get(`http://127.0.0.1:5000/api/bookings/tutor/${tutorId}`);
+      const response = await axios.get(`${process.env.REACT_APP_API_URL}/api/bookings/tutor/${tutorId}`);
       setBookings(response.data); // Save bookings to display in table
     } catch (err) {
       // Show error if request fails
@@ -85,7 +85,7 @@ const TutorBookings = ({ tutorId }) => {
     setActionMessage({ type: "", text: "" });
     
     try {
-      const response = await axios.put(`http://127.0.0.1:5000/api/bookings/${bookingId}/accept`);
+      const response = await axios.put(`${process.env.REACT_APP_API_URL}/api/bookings/${bookingId}/accept`);
       const successMsg = response.data.message || "Booking accepted successfully!";
       setActionMessage({ type: "success", text: successMsg });
       if (window.showToast) {
@@ -112,7 +112,7 @@ const TutorBookings = ({ tutorId }) => {
     setActionMessage({ type: "", text: "" });
     
     try {
-      const response = await axios.put(`http://127.0.0.1:5000/api/bookings/${bookingId}/deny`);
+      const response = await axios.put(`${process.env.REACT_APP_API_URL}/api/bookings/${bookingId}/deny`);
       const successMsg = response.data.message || "Booking denied successfully!";
       setActionMessage({ type: "success", text: successMsg });
       if (window.showToast) {

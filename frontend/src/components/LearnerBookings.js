@@ -58,7 +58,7 @@ const LearnerBookings = ({ learnerId, onNavigateToTutors }) => {
     try {
       // Get bookings from backend
       // Backend returns bookings with tutor names, modules, and rates
-      const response = await axios.get(`http://127.0.0.1:5000/api/bookings/learner/${learnerId}`);
+      const response = await axios.get(`${process.env.REACT_APP_API_URL}/api/bookings/learner/${learnerId}`);
       setBookings(response.data); // Save bookings to display in table
     } catch (err) {
       // Show error if request fails
@@ -94,7 +94,7 @@ const LearnerBookings = ({ learnerId, onNavigateToTutors }) => {
     setActionLoadingId(bookingId);
     try {
       // Send request to backend to cancel this booking
-      await axios.put(`http://127.0.0.1:5000/api/bookings/${bookingId}/cancel`);
+      await axios.put(`${process.env.REACT_APP_API_URL}/api/bookings/${bookingId}/cancel`);
       // Show success message and refresh the list
       setActionMessage({ type: "success", text: "Booking cancelled successfully." });
       fetchBookings();
@@ -117,7 +117,7 @@ const LearnerBookings = ({ learnerId, onNavigateToTutors }) => {
     if (!learnerId || bookings.length === 0) return;
     const results = await Promise.all(
       bookings.map(booking =>
-        axios.get(`http://127.0.0.1:5000/api/reviews/booking/${booking.booking_id}`)
+        axios.get(`${process.env.REACT_APP_API_URL}/api/reviews/booking/${booking.booking_id}`)
           .then(res => res.data.exists ? booking.booking_id : null)
           .catch(() => null)
       )
@@ -147,7 +147,7 @@ const LearnerBookings = ({ learnerId, onNavigateToTutors }) => {
     setActionLoadingId(booking.booking_id);
     
     try {
-      await axios.post("http://127.0.0.1:5000/api/reviews", {
+      await axios.post("${process.env.REACT_APP_API_URL}/api/reviews", {
         booking_id: booking.booking_id,
         learner_id: learnerId,
         tutor_id: booking.tutor_id,
@@ -189,7 +189,7 @@ const LearnerBookings = ({ learnerId, onNavigateToTutors }) => {
     try {
       // Send new date/time to backend
       // Backend updates the booking and changes status to 'rescheduled'
-      await axios.put(`http://127.0.0.1:5000/api/bookings/${bookingId}/reschedule`, {
+      await axios.put(`${process.env.REACT_APP_API_URL}/api/bookings/${bookingId}/reschedule`, {
         session_date: rescheduleForm.session_date,
         session_time: rescheduleForm.session_time,
       });

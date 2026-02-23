@@ -24,8 +24,8 @@ const CalendarView = ({ userId, role }) => {
 
     try {
       const endpoint = role === 'tutor' 
-        ? `http://127.0.0.1:5000/api/bookings/tutor/${userId}`
-        : `http://127.0.0.1:5000/api/bookings/learner/${userId}`;
+        ? `${process.env.REACT_APP_API_URL}/api/bookings/tutor/${userId}`
+        : `${process.env.REACT_APP_API_URL}/api/bookings/learner/${userId}`;
       
       const response = await axios.get(endpoint);
       setBookings(response.data);

@@ -62,7 +62,7 @@ const TutorSearch = ({ learnerId }) => {
     if (!learnerId) return;
     const fetchLearnerModules = async () => {
       try {
-        const res = await axios.get(`http://127.0.0.1:5000/students/${learnerId}`);
+        const res = await axios.get(`${process.env.REACT_APP_API_URL}/students/${learnerId}`);
         const modulesStr = res.data.modules || "";
         if (modulesStr.trim()) {
           const parsed = modulesStr.split(',').map(m => m.trim()).filter(m => m.length > 0);
@@ -136,7 +136,7 @@ const TutorSearch = ({ learnerId }) => {
         queryParams += `&sort_by=${filters.sortBy}`;
       }
       
-      const response = await axios.get(`http://127.0.0.1:5000/api/tutors?${queryParams}`);
+      const response = await axios.get(`${process.env.REACT_APP_API_URL}/api/tutors?${queryParams}`);
       setTutors(response.data);//stores list of tutors in component state
       if (response.data.length === 0) { //if no tutor found show this message
         setError("No tutors found matching your criteria. Try adjusting your filters.");
