@@ -2061,9 +2061,9 @@ def serve_proof_document(tutor_id):
         # Get file data from database
         proof_doc = tutor["proof_doc"]
         
-        # Handle BLOB (bytes) format - files are stored as binary data
-        if isinstance(proof_doc, bytes):
-            file_data = proof_doc
+        # Handle BLOB (bytes/memoryview) format - PostgreSQL BYTEA returns memoryview
+        if isinstance(proof_doc, (bytes, memoryview)):
+            file_data = bytes(proof_doc)
         elif isinstance(proof_doc, str):
             # If stored as filename string, try to read from filesystem
             try:
