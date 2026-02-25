@@ -256,7 +256,6 @@ const Register = ({ onRegisterSuccess }) => {
                   >
                     <option value="learner">Learner (Student seeking tutoring)</option>
                     <option value="tutor">Tutor (Want to teach)</option>
-                    <option value="admin">Admin (Platform administrator)</option>
                   </select>
                   <small className="text-muted">Select your account type</small>
                 </div>

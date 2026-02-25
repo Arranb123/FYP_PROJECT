@@ -1989,6 +1989,61 @@ def update_user_status(user_id):
         traceback.print_exc()
         return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
 
+# Admin create admin account
+# ref: https://claude.ai/share/3e13c9fc-19f7-430c-b698-534f25042439
+@app.route('/api/admin/create-admin', methods=['POST'])
+def create_admin():
+    """
+    Creates a new admin user account.
+    Only accessible from the admin dashboard.
+    """
+    data = request.get_json()
+    email = data.get('email', '').strip()
+    password = data.get('password', '').strip()
+
+    if not email or not password:
+        return jsonify({"error": "Email and password are required"}), 400
+
+    if len(password) < 6:
+        return jsonify({"error": "Password must be at least 6 characters long"}), 400
+
+    import re
+    if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
+        return jsonify({"error": "Invalid email format"}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        import hashlib
+        password_hash = hashlib.sha256(password.encode()).hexdigest()
+
+        now = datetime.now()
+        cursor.execute("""
+            INSERT INTO users (email, password, role, student_id, tutor_id, created_at, updated_at)
+            VALUES (%s, %s, 'admin', NULL, NULL, %s, %s)
+            RETURNING user_id
+        """, (email, password_hash, now, now))
+
+        new_id = cursor.fetchone()["user_id"]
+        conn.commit()
+
+        return jsonify({
+            "message": "Admin account created successfully!",
+            "user_id": new_id,
+            "email": email,
+            "role": "admin"
+        }), 201
+
+    except Exception:
+        if conn:
+            conn.rollback()
+        return jsonify({"error": "Email already exists"}), 400
+    finally:
+        if conn:
+            conn.close()
+
 # Story 9 - admin view all reviews
 @app.route('/api/admin/reviews', methods=['GET'])
 def get_all_reviews():

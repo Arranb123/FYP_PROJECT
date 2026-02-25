@@ -89,6 +89,14 @@ function AdminDashboard({ onLogout, currentUser }) {
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
   
+  // Add Admin modal state
+  // ref: https://claude.ai/share/3e13c9fc-19f7-430c-b698-534f25042439
+  const [showAddAdminModal, setShowAddAdminModal] = useState(false);
+  const [adminForm, setAdminForm] = useState({ email: '', password: '' });
+  const [adminFormError, setAdminFormError] = useState('');
+  const [adminFormSuccess, setAdminFormSuccess] = useState('');
+  const [creatingAdmin, setCreatingAdmin] = useState(false);
+
   // Iteration 4 - User management state
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
@@ -277,6 +285,53 @@ function AdminDashboard({ onLogout, currentUser }) {
       }
     } finally {
       setChangingPassword(false);
+    }
+  };
+
+  // Create admin account handler
+  // ref: https://claude.ai/share/3e13c9fc-19f7-430c-b698-534f25042439
+  const handleCreateAdmin = async (e) => {
+    e.preventDefault();
+    setAdminFormError('');
+    setAdminFormSuccess('');
+
+    if (!adminForm.email || !adminForm.password) {
+      setAdminFormError('Email and password are required');
+      return;
+    }
+
+    if (adminForm.password.length < 6) {
+      setAdminFormError('Password must be at least 6 characters long');
+      return;
+    }
+
+    setCreatingAdmin(true);
+    try {
+      await axios.post(`${process.env.REACT_APP_API_URL}/api/admin/create-admin`, {
+        email: adminForm.email,
+        password: adminForm.password
+      });
+
+      setAdminFormSuccess('Admin account created successfully!');
+      setAdminForm({ email: '', password: '' });
+
+      if (window.showToast) {
+        window.showToast('Admin account created successfully!', 'success', 3000);
+      }
+
+      fetchUsers();
+      setTimeout(() => {
+        setShowAddAdminModal(false);
+        setAdminFormSuccess('');
+      }, 2000);
+    } catch (error) {
+      const errorMsg = error?.response?.data?.error || 'Failed to create admin account';
+      setAdminFormError(errorMsg);
+      if (window.showToast) {
+        window.showToast(errorMsg, 'error', 4000);
+      }
+    } finally {
+      setCreatingAdmin(false);
     }
   };
 
@@ -780,8 +835,19 @@ function AdminDashboard({ onLogout, currentUser }) {
               <h1 className="mb-3">User Management</h1>
               <p className="text-muted mb-4">Manage platform users</p>
               <CCard>
-                <CCardHeader>
-                  <CCardTitle>Users</CCardTitle>
+                <CCardHeader className="d-flex justify-content-between align-items-center">
+                  <CCardTitle className="mb-0">Users</CCardTitle>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => {
+                      setShowAddAdminModal(true);
+                      setAdminFormError('');
+                      setAdminFormSuccess('');
+                      setAdminForm({ email: '', password: '' });
+                    }}
+                  >
+                    <i className="bi bi-person-plus me-2"></i>Add Admin
+                  </button>
                 </CCardHeader>
                 <CCardBody>
                 {loadingUsers && (
@@ -1189,6 +1255,122 @@ function AdminDashboard({ onLogout, currentUser }) {
                         <>
                           <i className="bi bi-key me-2"></i>
                           Change Password
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Admin Modal */}
+      {/* ref: https://claude.ai/share/3e13c9fc-19f7-430c-b698-534f25042439 */}
+      {showAddAdminModal && (
+        <div
+          className="modal fade show"
+          style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}
+          tabIndex="-1"
+        >
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">
+                  <i className="bi bi-person-plus me-2"></i>Add Admin
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => {
+                    setShowAddAdminModal(false);
+                    setAdminFormError('');
+                    setAdminFormSuccess('');
+                    setAdminForm({ email: '', password: '' });
+                  }}
+                  aria-label="Close"
+                ></button>
+              </div>
+              <div className="modal-body">
+                <h6 className="mb-3">Create Admin Account</h6>
+
+                {adminFormError && (
+                  <div className="alert alert-danger" role="alert">
+                    <i className="bi bi-exclamation-triangle me-2"></i>
+                    {adminFormError}
+                  </div>
+                )}
+
+                {adminFormSuccess && (
+                  <div className="alert alert-success" role="alert">
+                    <i className="bi bi-check-circle me-2"></i>
+                    {adminFormSuccess}
+                  </div>
+                )}
+
+                <form onSubmit={handleCreateAdmin}>
+                  <div className="mb-3">
+                    <label htmlFor="admin_email" className="form-label">
+                      Email Address *
+                    </label>
+                    <input
+                      type="email"
+                      className="form-control"
+                      id="admin_email"
+                      value={adminForm.email}
+                      onChange={(e) => setAdminForm({ ...adminForm, email: e.target.value })}
+                      required
+                      disabled={creatingAdmin}
+                      placeholder="admin@example.com"
+                    />
+                  </div>
+
+                  <div className="mb-3">
+                    <label htmlFor="admin_password" className="form-label">
+                      Password *
+                    </label>
+                    <input
+                      type="password"
+                      className="form-control"
+                      id="admin_password"
+                      value={adminForm.password}
+                      onChange={(e) => setAdminForm({ ...adminForm, password: e.target.value })}
+                      required
+                      minLength="6"
+                      disabled={creatingAdmin}
+                    />
+                    <small className="text-muted">Must be at least 6 characters long</small>
+                  </div>
+
+                  <div className="d-flex justify-content-end gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        setShowAddAdminModal(false);
+                        setAdminFormError('');
+                        setAdminFormSuccess('');
+                        setAdminForm({ email: '', password: '' });
+                      }}
+                      disabled={creatingAdmin}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn btn-primary"
+                      disabled={creatingAdmin}
+                    >
+                      {creatingAdmin ? (
+                        <>
+                          <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                          Creating...
+                        </>
+                      ) : (
+                        <>
+                          <i className="bi bi-person-plus me-2"></i>
+                          Create Admin
                         </>
                       )}
                     </button>
