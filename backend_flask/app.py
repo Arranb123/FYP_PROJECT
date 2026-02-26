@@ -119,6 +119,11 @@ def init_database():
         );
         """)
 
+        # Iteration 7 - Add meeting_url column if it doesn't exist (safe to run on existing DB)
+        cursor.execute("""
+        ALTER TABLE bookings ADD COLUMN IF NOT EXISTS meeting_url TEXT;
+        """)
+
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS reviews (
             review_id SERIAL PRIMARY KEY,
@@ -1696,27 +1701,34 @@ def create_review():
             except (KeyError, IndexError):
                 booking_time_str = "00:00"
             
-            # Parse the date
-            booking_date = datetime.strptime(booking_date_str, "%Y-%m-%d").date()
-            
-            # Parse the time (handle different formats)
-            if isinstance(booking_time_str, str) and booking_time_str:
+            # Parse the date - PostgreSQL returns datetime.date objects, handle both
+            from datetime import date as date_type, time as time_type
+            if isinstance(booking_date_str, date_type):
+                booking_date = booking_date_str
+            else:
+                booking_date = datetime.strptime(str(booking_date_str), "%Y-%m-%d").date()
+
+            # Parse the time (handle datetime.time from PostgreSQL or string)
+            if isinstance(booking_time_str, time_type):
+                booking_datetime = datetime.combine(booking_date, booking_time_str)
+            elif isinstance(booking_time_str, str) and booking_time_str:
                 # Remove seconds if present (e.g., "14:30:00" -> "14:30")
                 if len(booking_time_str) > 5:
                     booking_time_str = booking_time_str[:5]
-                # Combine date and time to create a full datetime
-                booking_datetime = datetime.strptime(f"{booking_date_str} {booking_time_str}", "%Y-%m-%d %H:%M")
+                booking_datetime = datetime.strptime(f"{booking_date} {booking_time_str}", "%Y-%m-%d %H:%M")
             else:
-                # If time is not a string, just check the date
+                # If time is not available, just check the date
                 booking_datetime = datetime.combine(booking_date, datetime.min.time())
-            
+
             now = datetime.now()
             if booking_datetime > now:
                 return jsonify({"error": "You can only review sessions that have already taken place"}), 400
-        except (ValueError, KeyError) as e:
+        except (ValueError, KeyError, TypeError) as e:
             # If datetime parsing fails, log error but allow review (fallback to date-only check)
             print(f"Warning: Could not parse booking datetime: {e}")
-            booking_date = datetime.strptime(booking["session_date"], "%Y-%m-%d").date()
+            raw_date = booking["session_date"]
+            from datetime import date as date_type
+            booking_date = raw_date if isinstance(raw_date, date_type) else datetime.strptime(str(raw_date), "%Y-%m-%d").date()
             today = date.today()
             if booking_date > today:
                 return jsonify({"error": "You can only review sessions that have already taken place"}), 400
@@ -1989,7 +2001,7 @@ def update_user_status(user_id):
         traceback.print_exc()
         return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
 
-# Admin create admin account
+# Iteration 6 - Admin create admin account
 # ref: https://claude.ai/share/3e13c9fc-19f7-430c-b698-534f25042439
 @app.route('/api/admin/create-admin', methods=['POST'])
 def create_admin():
@@ -2640,12 +2652,84 @@ def accept_booking(booking_id):
         
         # Update status to confirmed
         cursor.execute("""
-            UPDATE bookings 
+            UPDATE bookings
             SET status = 'confirmed', updated_at = %s
             WHERE booking_id = %s
         """, (datetime.now(), booking_id))
-        
+
         conn.commit()
+
+        # Iteration 7 - Create Teams meeting and send acceptance email
+        # ref: https://claude.ai/share/3e13c9fc-19f7-430c-b698-534f25042439
+        try:
+            from api_integrations import create_teams_meeting, send_booking_accepted_email
+
+            # Re-fetch booking (now has confirmed status)
+            cursor.execute("SELECT * FROM bookings WHERE booking_id = %s", (booking_id,))
+            confirmed_booking = cursor.fetchone()
+
+            cursor.execute("SELECT first_name, last_name, college_email FROM students WHERE id = %s", (confirmed_booking['learner_id'],))
+            learner = cursor.fetchone()
+            cursor.execute("SELECT first_name, last_name, college_email FROM tutors WHERE tutor_id = %s", (confirmed_booking['tutor_id'],))
+            tutor = cursor.fetchone()
+
+            learner_name = f"{learner['first_name']} {learner['last_name']}"
+            tutor_name = f"{tutor['first_name']} {tutor['last_name']}"
+
+            # Combine session date and time into datetime objects
+            session_date = confirmed_booking['session_date']
+            session_time_val = confirmed_booking['session_time']
+            from datetime import time as time_type, timedelta as td
+            if isinstance(session_time_val, time_type):
+                start_dt = datetime.combine(session_date, session_time_val)
+            else:
+                from datetime import time as time_type
+                parts = str(session_time_val).split(':')
+                start_dt = datetime.combine(session_date, time_type(int(parts[0]), int(parts[1])))
+            end_dt = start_dt + td(minutes=int(confirmed_booking['duration']))
+
+            # Create Teams meeting via Graph API
+            meeting_url = None
+            teams_result = create_teams_meeting(
+                f"StudyHive: {learner_name} with {tutor_name}",
+                start_dt,
+                end_dt,
+            )
+            if teams_result.get('success'):
+                meeting_url = teams_result['join_url']
+                # Store meeting URL in booking record
+                conn2 = get_db_connection()
+                cursor2 = conn2.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+                cursor2.execute(
+                    "UPDATE bookings SET meeting_url = %s WHERE booking_id = %s",
+                    (meeting_url, booking_id)
+                )
+                conn2.commit()
+                conn2.close()
+                print(f"[SUCCESS] Teams meeting URL stored for booking {booking_id}")
+            else:
+                print(f"[WARNING] Teams meeting not created: {teams_result.get('message')}")
+
+            # Send acceptance email to both parties (with Teams link if available)
+            booking_data = {
+                'session_date': str(session_date),
+                'session_time': str(session_time_val),
+                'duration': confirmed_booking['duration'],
+                'module': confirmed_booking.get('module', ''),
+            }
+            email_result = send_booking_accepted_email(
+                learner['college_email'], tutor['college_email'],
+                learner_name, tutor_name, booking_data, meeting_url
+            )
+            if email_result.get('success'):
+                print(f"[SUCCESS] Acceptance emails sent for booking {booking_id}")
+            else:
+                print(f"[WARNING] Acceptance email failed: {email_result.get('message')}")
+
+        except Exception as integration_err:
+            # Don't fail the booking acceptance if Teams/email integration fails
+            print(f"[WARNING] Teams/email integration error on accept: {integration_err}")
+
         return jsonify({"message": "Booking accepted successfully", "booking_id": booking_id}), 200
     except Exception as e:
         if conn:
