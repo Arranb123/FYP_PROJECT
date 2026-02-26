@@ -27,7 +27,7 @@ GOOGLE_CALENDAR_TOKEN_FILE = os.getenv('GOOGLE_CALENDAR_TOKEN', 'token.json')
 # Iteration 4 - SendGrid API key configured
 # Reference: https://chatgpt.com/share/6984a96d-f0cc-8008-abdc-dc3fe4261951
 SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY', 'YOUR_SENDGRID_API_KEY_HERE')
-SENDGRID_FROM_EMAIL = os.getenv('SENDGRID_FROM_EMAIL', 'studyhive.noreply@gmail.com')  # Iteration 4 - Verified sender email
+SENDGRID_FROM_EMAIL = os.getenv('SENDGRID_FROM_EMAIL', 'arranbearman@gmail.com')  # Iteration 4 - Verified sender email
 
 # Timezone API Configuration
 # Using free API: https://timezoneapi.io/ (free tier available)
