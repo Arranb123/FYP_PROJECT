@@ -4,6 +4,9 @@
 
 import os
 import json
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from datetime import datetime, timedelta
 from pathlib import Path
 import requests
@@ -13,6 +16,8 @@ from config import (
     ENABLE_TIMEZONE_API,
     SENDGRID_API_KEY,
     SENDGRID_FROM_EMAIL,
+    GMAIL_USER,
+    GMAIL_APP_PASSWORD,
     GOOGLE_CALENDAR_CREDENTIALS_FILE,
     GOOGLE_CALENDAR_TOKEN_FILE,
     ENABLE_TEAMS_MEETINGS,
@@ -134,28 +139,38 @@ def create_google_calendar_event(booking_data, learner_email, tutor_email, learn
 
 
 ###################
-# EMAIL API (SendGrid)
+# EMAIL API (Gmail SMTP)
+# Iteration 8 - Switched from SendGrid to Gmail SMTP to avoid sender deferral issues
 # Reference: https://chatgpt.com/share/6984a96d-f0cc-8008-abdc-dc3fe4261951
 ###################
+
+def _send_gmail(to_email, subject, html_content):
+    # Helper: sends a single HTML email via Gmail SMTP using App Password
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = subject
+    msg['From'] = f"StudyHive <{GMAIL_USER}>"
+    msg['To'] = to_email
+    msg.attach(MIMEText(html_content, 'html'))
+    with smtplib.SMTP('smtp.gmail.com', 587) as server:
+        server.starttls()
+        server.login(GMAIL_USER, GMAIL_APP_PASSWORD)
+        server.sendmail(GMAIL_USER, to_email, msg.as_string())
+
 
 def send_booking_confirmation_email(learner_email, tutor_email, learner_name, tutor_name, booking_data):
     # Sends booking confirmation emails to both learner and tutor
     # Returns dict with success status and message
     if not ENABLE_EMAIL_NOTIFICATIONS:
         return {"success": False, "message": "Email notifications are disabled"}
-    
-    if not SENDGRID_API_KEY:
-        return {"success": False, "message": "SendGrid API key not configured"}
-    
+
+    if not GMAIL_APP_PASSWORD:
+        return {"success": False, "message": "Gmail App Password not configured"}
+
     try:
-        from sendgrid import SendGridAPIClient
-        from sendgrid.helpers.mail import Mail
-        
         session_date = booking_data.get('session_date')
         session_time = booking_data.get('session_time')
         duration = booking_data.get('duration', 60)
-        
-        # Email to learner
+
         learner_subject = f"Booking Confirmed: Tutoring Session with {tutor_name}"
         learner_content = f"""
         <html>
@@ -176,7 +191,6 @@ def send_booking_confirmation_email(learner_email, tutor_email, learner_name, tu
         </html>
         """
 
-        # Email to tutor
         tutor_subject = f"New Booking: Tutoring Session with {learner_name}"
         tutor_content = f"""
         <html>
@@ -196,44 +210,16 @@ def send_booking_confirmation_email(learner_email, tutor_email, learner_name, tu
         </body>
         </html>
         """
-        
-        # Send email to learner
-        message_learner = Mail(
-            from_email=SENDGRID_FROM_EMAIL,
-            to_emails=learner_email,
-            subject=learner_subject,
-            html_content=learner_content
-        )
-        
-        # Send email to tutor
-        message_tutor = Mail(
-            from_email=SENDGRID_FROM_EMAIL,
-            to_emails=tutor_email,
-            subject=tutor_subject,
-            html_content=tutor_content
-        )
-        
-        sg = SendGridAPIClient(SENDGRID_API_KEY)
-        
-        # Iteration 4 - Send both emails with logging
+
         print(f"[INFO] Attempting to send emails to learner ({learner_email}) and tutor ({tutor_email})")
-        response_learner = sg.send(message_learner)
-        response_tutor = sg.send(message_tutor)
-        
-        print(f"[SUCCESS] Emails sent successfully - Learner status: {response_learner.status_code}, Tutor status: {response_tutor.status_code}")
-        
-        return {
-            "success": True,
-            "message": "Confirmation emails sent successfully",
-            "learner_status": response_learner.status_code,
-            "tutor_status": response_tutor.status_code
-        }
-    
+        _send_gmail(learner_email, learner_subject, learner_content)
+        _send_gmail(tutor_email, tutor_subject, tutor_content)
+        print(f"[SUCCESS] Emails sent successfully via Gmail SMTP")
+
+        return {"success": True, "message": "Confirmation emails sent successfully"}
+
     except Exception as e:
-        return {
-            "success": False,
-            "message": f"Failed to send emails: {str(e)}"
-        }
+        return {"success": False, "message": f"Failed to send emails: {str(e)}"}
 
 
 ###################
@@ -383,13 +369,10 @@ def send_booking_accepted_email(learner_email, tutor_email, learner_name, tutor_
     if not ENABLE_EMAIL_NOTIFICATIONS:
         return {"success": False, "message": "Email notifications are disabled"}
 
-    if not SENDGRID_API_KEY:
-        return {"success": False, "message": "SendGrid API key not configured"}
+    if not GMAIL_APP_PASSWORD:
+        return {"success": False, "message": "Gmail App Password not configured"}
 
     try:
-        from sendgrid import SendGridAPIClient
-        from sendgrid.helpers.mail import Mail
-
         session_date = booking_data.get('session_date')
         session_time = booking_data.get('session_time')
         duration = booking_data.get('duration', 60)
@@ -459,32 +442,12 @@ def send_booking_accepted_email(learner_email, tutor_email, learner_name, tutor_
         </body></html>
         """
 
-        sg = SendGridAPIClient(SENDGRID_API_KEY)
-
-        message_learner = Mail(
-            from_email=SENDGRID_FROM_EMAIL,
-            to_emails=learner_email,
-            subject=f"Booking Confirmed: Session with {tutor_name}",
-            html_content=learner_content,
-        )
-        message_tutor = Mail(
-            from_email=SENDGRID_FROM_EMAIL,
-            to_emails=tutor_email,
-            subject=f"Booking Accepted: Session with {learner_name}",
-            html_content=tutor_content,
-        )
-
         print(f"[INFO] Sending acceptance emails to {learner_email} and {tutor_email}")
-        response_learner = sg.send(message_learner)
-        response_tutor = sg.send(message_tutor)
-        print(f"[SUCCESS] Acceptance emails sent - Learner: {response_learner.status_code}, Tutor: {response_tutor.status_code}")
+        _send_gmail(learner_email, f"Booking Confirmed: Session with {tutor_name}", learner_content)
+        _send_gmail(tutor_email, f"Booking Accepted: Session with {learner_name}", tutor_content)
+        print(f"[SUCCESS] Acceptance emails sent via Gmail SMTP")
 
-        return {
-            "success": True,
-            "message": "Acceptance emails sent successfully",
-            "learner_status": response_learner.status_code,
-            "tutor_status": response_tutor.status_code,
-        }
+        return {"success": True, "message": "Acceptance emails sent successfully"}
 
     except Exception as e:
         return {"success": False, "message": f"Failed to send acceptance emails: {str(e)}"}

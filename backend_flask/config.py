@@ -29,6 +29,12 @@ GOOGLE_CALENDAR_TOKEN_FILE = os.getenv('GOOGLE_CALENDAR_TOKEN', 'token.json')
 SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY', 'YOUR_SENDGRID_API_KEY_HERE')
 SENDGRID_FROM_EMAIL = os.getenv('SENDGRID_FROM_EMAIL', 'arranbearman@gmail.com')  # Iteration 4 - Verified sender email
 
+# Gmail SMTP Configuration (Iteration 8 - replaces SendGrid sending)
+# Use a Gmail App Password (not your regular password)
+# Generate at: Google Account > Security > 2-Step Verification > App Passwords
+GMAIL_USER = os.getenv('GMAIL_USER', 'arranbearman@gmail.com')
+GMAIL_APP_PASSWORD = os.getenv('GMAIL_APP_PASSWORD', '')
+
 # Timezone API Configuration
 # Using free API: https://timezoneapi.io/ (free tier available)
 # Alternative: WorldTimeAPI (completely free, no key needed)
