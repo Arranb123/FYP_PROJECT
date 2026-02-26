@@ -486,15 +486,29 @@ const LearnerBookings = ({ learnerId, onNavigateToTutors }) => {
                           )}
                           {/* Iteration 4 - Messages button for confirmed bookings */}
                           {(booking.status === "confirmed" || booking.status === "accepted") && (
-                            <button
-                              className="btn btn-sm btn-outline-info"
-                              onClick={() => setShowMessagesForBooking(
-                                showMessagesForBooking === booking.booking_id ? null : booking.booking_id
+                            <>
+                              {/* Iteration 7 - Join Teams Meeting button */}
+                              {booking.meeting_url && (
+                                <a
+                                  href={booking.meeting_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="btn btn-sm btn-primary"
+                                  title="Join Teams Meeting"
+                                >
+                                  Join Meeting
+                                </a>
                               )}
-                              title="View messages"
-                            >
-                              {showMessagesForBooking === booking.booking_id ? "Hide Messages" : "Messages"}
-                            </button>
+                              <button
+                                className="btn btn-sm btn-outline-info"
+                                onClick={() => setShowMessagesForBooking(
+                                  showMessagesForBooking === booking.booking_id ? null : booking.booking_id
+                                )}
+                                title="View messages"
+                              >
+                                {showMessagesForBooking === booking.booking_id ? "Hide Messages" : "Messages"}
+                              </button>
+                            </>
                           )}
                           <button
                             className="btn btn-sm btn-outline-secondary"

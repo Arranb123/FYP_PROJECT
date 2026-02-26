@@ -14,7 +14,12 @@ from config import (
     SENDGRID_API_KEY,
     SENDGRID_FROM_EMAIL,
     GOOGLE_CALENDAR_CREDENTIALS_FILE,
-    GOOGLE_CALENDAR_TOKEN_FILE
+    GOOGLE_CALENDAR_TOKEN_FILE,
+    ENABLE_TEAMS_MEETINGS,
+    TEAMS_CLIENT_ID,
+    TEAMS_CLIENT_SECRET,
+    TEAMS_TENANT_ID,
+    TEAMS_ORGANIZER_USER_ID,
 )
 
 ###################
@@ -170,7 +175,7 @@ def send_booking_confirmation_email(learner_email, tutor_email, learner_name, tu
         </body>
         </html>
         """
-        
+
         # Email to tutor
         tutor_subject = f"New Booking: Tutoring Session with {learner_name}"
         tutor_content = f"""
@@ -304,6 +309,186 @@ def convert_to_utc(local_datetime, timezone_name):
 ###################
 # WEATHER API (Bonus - OpenWeatherMap)
 ###################
+
+###################
+# MICROSOFT TEAMS API (Microsoft Graph)
+# Iteration 7 - Creates a Teams online meeting when a booking is accepted
+# Reference: https://learn.microsoft.com/en-us/graph/api/application-post-onlinemeetings
+###################
+
+def create_teams_meeting(subject, start_datetime, end_datetime):
+    # Creates a Microsoft Teams online meeting via Microsoft Graph API
+    # Returns dict with success status, join_url, and message
+    if not ENABLE_TEAMS_MEETINGS:
+        return {"success": False, "message": "Teams meetings are disabled"}
+
+    if not all([TEAMS_CLIENT_ID, TEAMS_CLIENT_SECRET, TEAMS_TENANT_ID, TEAMS_ORGANIZER_USER_ID]):
+        return {"success": False, "message": "Teams credentials not fully configured"}
+
+    try:
+        import msal
+
+        authority = f"https://login.microsoftonline.com/{TEAMS_TENANT_ID}"
+        app = msal.ConfidentialClientApplication(
+            TEAMS_CLIENT_ID,
+            authority=authority,
+            client_credential=TEAMS_CLIENT_SECRET,
+        )
+
+        token_response = app.acquire_token_for_client(
+            scopes=["https://graph.microsoft.com/.default"]
+        )
+
+        if "access_token" not in token_response:
+            error_desc = token_response.get("error_description", "Unknown error")
+            return {"success": False, "message": f"Failed to get Teams access token: {error_desc}"}
+
+        headers = {
+            "Authorization": f"Bearer {token_response['access_token']}",
+            "Content-Type": "application/json",
+        }
+
+        meeting_body = {
+            "subject": subject,
+            "startDateTime": start_datetime.strftime("%Y-%m-%dT%H:%M:%S") + "Z",
+            "endDateTime": end_datetime.strftime("%Y-%m-%dT%H:%M:%S") + "Z",
+        }
+
+        response = requests.post(
+            f"https://graph.microsoft.com/v1.0/users/{TEAMS_ORGANIZER_USER_ID}/onlineMeetings",
+            headers=headers,
+            json=meeting_body,
+            timeout=15,
+        )
+
+        if response.status_code in (200, 201):
+            data = response.json()
+            join_url = data.get("joinWebUrl")
+            print(f"[SUCCESS] Teams meeting created: {join_url}")
+            return {"success": True, "join_url": join_url, "message": "Teams meeting created successfully"}
+        else:
+            error_text = response.text
+            print(f"[WARNING] Teams API returned {response.status_code}: {error_text}")
+            return {"success": False, "message": f"Teams API error {response.status_code}: {error_text}"}
+
+    except Exception as e:
+        print(f"[WARNING] Teams meeting creation failed: {e}")
+        return {"success": False, "message": f"Failed to create Teams meeting: {str(e)}"}
+
+
+def send_booking_accepted_email(learner_email, tutor_email, learner_name, tutor_name, booking_data, meeting_url=None):
+    # Sends acceptance confirmation emails to both learner and tutor
+    # Includes Teams meeting link if one was generated
+    # Returns dict with success status and message
+    if not ENABLE_EMAIL_NOTIFICATIONS:
+        return {"success": False, "message": "Email notifications are disabled"}
+
+    if not SENDGRID_API_KEY:
+        return {"success": False, "message": "SendGrid API key not configured"}
+
+    try:
+        from sendgrid import SendGridAPIClient
+        from sendgrid.helpers.mail import Mail
+
+        session_date = booking_data.get('session_date')
+        session_time = booking_data.get('session_time')
+        duration = booking_data.get('duration', 60)
+        module = booking_data.get('module', '')
+
+        meeting_section = ""
+        if meeting_url:
+            meeting_section = f"""
+            <div style="margin: 20px 0; padding: 15px; background-color: #e8f0fe; border-radius: 8px; text-align: center;">
+                <p style="margin: 0 0 10px 0; font-weight: bold;">Your Teams Meeting Link</p>
+                <a href="{meeting_url}"
+                   style="display: inline-block; padding: 12px 24px; background-color: #6264a7; color: white;
+                          text-decoration: none; border-radius: 5px; font-weight: bold;">
+                    Join Teams Meeting
+                </a>
+                <p style="margin: 10px 0 0 0; font-size: 12px; color: #555;">
+                    Or copy this link: {meeting_url}
+                </p>
+            </div>
+            """
+
+        module_line = f"<li><strong>Module:</strong> {module}</li>" if module else ""
+
+        learner_content = f"""
+        <html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background-color: #4a90d9; padding: 20px; text-align: center;">
+                <h1 style="color: white; margin: 0;">StudyHive</h1>
+            </div>
+            <div style="padding: 20px;">
+                <h2>Your Booking Has Been Confirmed!</h2>
+                <p>Hello {learner_name},</p>
+                <p>Great news! Your tutor <strong>{tutor_name}</strong> has accepted your booking.</p>
+                <p><strong>Session Details:</strong></p>
+                <ul>
+                    <li><strong>Tutor:</strong> {tutor_name}</li>
+                    <li><strong>Date:</strong> {session_date}</li>
+                    <li><strong>Time:</strong> {session_time}</li>
+                    <li><strong>Duration:</strong> {duration} minutes</li>
+                    {module_line}
+                </ul>
+                {meeting_section}
+                <p>Best regards,<br>StudyHive Team</p>
+            </div>
+        </body></html>
+        """
+
+        tutor_content = f"""
+        <html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background-color: #4a90d9; padding: 20px; text-align: center;">
+                <h1 style="color: white; margin: 0;">StudyHive</h1>
+            </div>
+            <div style="padding: 20px;">
+                <h2>Booking Accepted</h2>
+                <p>Hello {tutor_name},</p>
+                <p>You have accepted a tutoring session with <strong>{learner_name}</strong>.</p>
+                <p><strong>Session Details:</strong></p>
+                <ul>
+                    <li><strong>Learner:</strong> {learner_name}</li>
+                    <li><strong>Date:</strong> {session_date}</li>
+                    <li><strong>Time:</strong> {session_time}</li>
+                    <li><strong>Duration:</strong> {duration} minutes</li>
+                    {module_line}
+                </ul>
+                {meeting_section}
+                <p>Best regards,<br>StudyHive Team</p>
+            </div>
+        </body></html>
+        """
+
+        sg = SendGridAPIClient(SENDGRID_API_KEY)
+
+        message_learner = Mail(
+            from_email=SENDGRID_FROM_EMAIL,
+            to_emails=learner_email,
+            subject=f"Booking Confirmed: Session with {tutor_name}",
+            html_content=learner_content,
+        )
+        message_tutor = Mail(
+            from_email=SENDGRID_FROM_EMAIL,
+            to_emails=tutor_email,
+            subject=f"Booking Accepted: Session with {learner_name}",
+            html_content=tutor_content,
+        )
+
+        print(f"[INFO] Sending acceptance emails to {learner_email} and {tutor_email}")
+        response_learner = sg.send(message_learner)
+        response_tutor = sg.send(message_tutor)
+        print(f"[SUCCESS] Acceptance emails sent - Learner: {response_learner.status_code}, Tutor: {response_tutor.status_code}")
+
+        return {
+            "success": True,
+            "message": "Acceptance emails sent successfully",
+            "learner_status": response_learner.status_code,
+            "tutor_status": response_tutor.status_code,
+        }
+
+    except Exception as e:
+        return {"success": False, "message": f"Failed to send acceptance emails: {str(e)}"}
+
 
 def get_weather_info(city_name, api_key=None):
     # Gets weather info for a city using OpenWeatherMap API

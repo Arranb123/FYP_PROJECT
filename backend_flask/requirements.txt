@@ -29,3 +29,6 @@ gunicorn==21.2.0
 # PostgreSQL database driver
 psycopg2-binary==2.9.9
 
+# Microsoft Authentication Library - used for Teams Graph API (Iteration 7)
+msal==1.31.0
+
