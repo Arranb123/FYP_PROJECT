@@ -12,6 +12,11 @@ from flask_cors import CORS  #import and flask setup   # https://flask-cors.read
 from datetime import datetime, timedelta
 import os
 import re
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env file from backend_flask directory
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 # PostgreSQL connection URL from environment variable
 DATABASE_URL = os.environ.get('DATABASE_URL')
