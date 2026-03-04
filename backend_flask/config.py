@@ -46,12 +46,3 @@ ENABLE_TIMEZONE_API = os.getenv('ENABLE_TIMEZONE_API', 'true').lower() == 'true'
 if not SENDGRID_API_KEY and ENABLE_EMAIL_NOTIFICATIONS:
     print("[WARNING] SendGrid API key not found. Email notifications disabled.")
     ENABLE_EMAIL_NOTIFICATIONS = False
-
-# Iteration 7 - Microsoft Teams / Graph API Configuration
-# Get credentials from: https://portal.azure.com > App registrations
-# Requires OnlineMeetings.ReadWrite.All application permission with admin consent
-TEAMS_CLIENT_ID = os.getenv('TEAMS_CLIENT_ID', '')
-TEAMS_CLIENT_SECRET = os.getenv('TEAMS_CLIENT_SECRET', '')
-TEAMS_TENANT_ID = os.getenv('TEAMS_TENANT_ID', '')
-TEAMS_ORGANIZER_USER_ID = os.getenv('TEAMS_ORGANIZER_USER_ID', '')
-ENABLE_TEAMS_MEETINGS = os.getenv('ENABLE_TEAMS_MEETINGS', 'false').lower() == 'true'

@@ -89,7 +89,7 @@ function AdminDashboard({ onLogout, currentUser }) {
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
   
-  // Add Admin modal state
+  // Iteration 6 - Add Admin modal state
   // ref: https://claude.ai/share/3e13c9fc-19f7-430c-b698-534f25042439
   const [showAddAdminModal, setShowAddAdminModal] = useState(false);
   const [adminForm, setAdminForm] = useState({ email: '', password: '' });
@@ -288,7 +288,7 @@ function AdminDashboard({ onLogout, currentUser }) {
     }
   };
 
-  // Create admin account handler
+  // Iteration 6 - Create admin account handler
   // ref: https://claude.ai/share/3e13c9fc-19f7-430c-b698-534f25042439
   const handleCreateAdmin = async (e) => {
     e.preventDefault();
@@ -1266,7 +1266,7 @@ function AdminDashboard({ onLogout, currentUser }) {
         </div>
       )}
 
-      {/* Add Admin Modal */}
+      {/* Iteration 6 - Add Admin Modal */}
       {/* ref: https://claude.ai/share/3e13c9fc-19f7-430c-b698-534f25042439 */}
       {showAddAdminModal && (
         <div

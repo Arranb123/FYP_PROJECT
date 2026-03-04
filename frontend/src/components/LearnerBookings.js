@@ -487,18 +487,6 @@ const LearnerBookings = ({ learnerId, onNavigateToTutors }) => {
                           {/* Iteration 4 - Messages button for confirmed bookings */}
                           {(booking.status === "confirmed" || booking.status === "accepted") && (
                             <>
-                              {/* Iteration 7 - Join Teams Meeting button */}
-                              {booking.meeting_url && (
-                                <a
-                                  href={booking.meeting_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="btn btn-sm btn-primary"
-                                  title="Join Teams Meeting"
-                                >
-                                  Join Meeting
-                                </a>
-                              )}
                               <button
                                 className="btn btn-sm btn-outline-info"
                                 onClick={() => setShowMessagesForBooking(

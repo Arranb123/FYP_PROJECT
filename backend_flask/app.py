@@ -46,7 +46,7 @@ app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB max file size
 
 # DATABASE CONNECTION HELPER
 #references
-#https://www.w3schools.com/python/ref_module_sqlite3.asp#:~:text=Definition%20and%20Usage,needing%20a%20separate%20database%20server.
+#https://www.psycopg.org/docs/ - psycopg2 PostgreSQL adapter for Python
 #every time i run an sql query it calls this function
 def get_db_connection():
     conn = psycopg2.connect(DATABASE_URL)
@@ -117,11 +117,6 @@ def init_database():
             FOREIGN KEY (learner_id) REFERENCES students(id),
             FOREIGN KEY (tutor_id) REFERENCES tutors(tutor_id)
         );
-        """)
-
-        # Iteration 7 - Add meeting_url column if it doesn't exist (safe to run on existing DB)
-        cursor.execute("""
-        ALTER TABLE bookings ADD COLUMN IF NOT EXISTS meeting_url TEXT;
         """)
 
         cursor.execute("""
@@ -476,7 +471,7 @@ def add_tutor():
 # GET VERIFIED TUTORS (for learners search)
 ###https://www.youtube.com/watch?v=KO0FufpqC7c#### - Video used to help create route
 # Iteration 4 - Added search filters (price range, rating, sorting)
-# ref: SQL WHERE clause - https://www.w3schools.com/sql/sql_where.asp
+# : SQL WHERE clause - https://www.w3schools.com/sql/sql_where.asp
 @app.route('/api/tutors', methods=['GET'])
 def get_tutor_list():
     #returns verified tutors when searched for module
@@ -2659,77 +2654,6 @@ def accept_booking(booking_id):
 
         conn.commit()
 
-        # Iteration 7 - Create Teams meeting and send acceptance email
-        # ref: https://claude.ai/share/3e13c9fc-19f7-430c-b698-534f25042439
-        try:
-            from api_integrations import create_teams_meeting, send_booking_accepted_email
-
-            # Re-fetch booking (now has confirmed status)
-            cursor.execute("SELECT * FROM bookings WHERE booking_id = %s", (booking_id,))
-            confirmed_booking = cursor.fetchone()
-
-            cursor.execute("SELECT first_name, last_name, college_email FROM students WHERE id = %s", (confirmed_booking['learner_id'],))
-            learner = cursor.fetchone()
-            cursor.execute("SELECT first_name, last_name, college_email FROM tutors WHERE tutor_id = %s", (confirmed_booking['tutor_id'],))
-            tutor = cursor.fetchone()
-
-            learner_name = f"{learner['first_name']} {learner['last_name']}"
-            tutor_name = f"{tutor['first_name']} {tutor['last_name']}"
-
-            # Combine session date and time into datetime objects
-            session_date = confirmed_booking['session_date']
-            session_time_val = confirmed_booking['session_time']
-            from datetime import time as time_type, timedelta as td
-            if isinstance(session_time_val, time_type):
-                start_dt = datetime.combine(session_date, session_time_val)
-            else:
-                from datetime import time as time_type
-                parts = str(session_time_val).split(':')
-                start_dt = datetime.combine(session_date, time_type(int(parts[0]), int(parts[1])))
-            end_dt = start_dt + td(minutes=int(confirmed_booking['duration']))
-
-            # Create Teams meeting via Graph API
-            meeting_url = None
-            teams_result = create_teams_meeting(
-                f"StudyHive: {learner_name} with {tutor_name}",
-                start_dt,
-                end_dt,
-            )
-            if teams_result.get('success'):
-                meeting_url = teams_result['join_url']
-                # Store meeting URL in booking record
-                conn2 = get_db_connection()
-                cursor2 = conn2.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-                cursor2.execute(
-                    "UPDATE bookings SET meeting_url = %s WHERE booking_id = %s",
-                    (meeting_url, booking_id)
-                )
-                conn2.commit()
-                conn2.close()
-                print(f"[SUCCESS] Teams meeting URL stored for booking {booking_id}")
-            else:
-                print(f"[WARNING] Teams meeting not created: {teams_result.get('message')}")
-
-            # Send acceptance email to both parties (with Teams link if available)
-            booking_data = {
-                'session_date': str(session_date),
-                'session_time': str(session_time_val),
-                'duration': confirmed_booking['duration'],
-                'module': confirmed_booking.get('module', ''),
-            }
-            email_result = send_booking_accepted_email(
-                learner['college_email'], tutor['college_email'],
-                learner_name, tutor_name, booking_data, meeting_url
-            )
-            if email_result.get('success'):
-                print(f"[SUCCESS] Acceptance emails sent for booking {booking_id}")
-            else:
-                print(f"[WARNING] Acceptance email failed: {email_result.get('message')}")
-
-        except Exception as integration_err:
-            # Don't fail the booking acceptance if Teams/email integration fails
-            print(f"[WARNING] Teams/email integration error on accept: {integration_err}")
-
         return jsonify({"message": "Booking accepted successfully", "booking_id": booking_id}), 200
     except Exception as e:
         if conn:
@@ -3497,84 +3421,6 @@ def login_user():
 def health_check():
     """Simple health check endpoint to verify server is running"""
     return jsonify({"status": "ok", "message": "Server is running"}), 200
-
-# Iteration 4 - API Test Endpoints
-@app.route('/api/test/timezone', methods=['GET'])
-def test_timezone_api():
-    """Test endpoint for timezone API"""
-    # Reference: https://chatgpt.com/share/6984a96d-f0cc-8008-abdc-dc3fe4261951
-    try:
-        from api_integrations import get_timezone_info
-        result = get_timezone_info()
-        return jsonify(result), 200
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
-
-@app.route('/api/test/email', methods=['POST'])
-def test_email_api():
-    """Test endpoint for email API (requires SendGrid setup)"""
-    # Reference: https://chatgpt.com/share/6984a96d-f0cc-8008-abdc-dc3fe4261951
-    try:
-        from api_integrations import send_booking_confirmation_email
-        data = request.get_json()
-        
-        # Test with sample data
-        result = send_booking_confirmation_email(
-            data.get('learner_email', 'test@example.com'),
-            data.get('tutor_email', 'tutor@example.com'),
-            data.get('learner_name', 'Test Learner'),
-            data.get('tutor_name', 'Test Tutor'),
-            {
-                'session_date': data.get('session_date', '2024-01-01'),
-                'session_time': data.get('session_time', '10:00'),
-                'duration': data.get('duration', 60)
-            }
-        )
-        return jsonify(result), 200
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
-
-@app.route('/api/test/google-calendar', methods=['GET'])
-def test_google_calendar_api():
-    """Test endpoint for Google Calendar API - checks if it's configured"""
-    # Reference: https://chatgpt.com/share/6984a96d-f0cc-8008-abdc-dc3fe4261951
-    try:
-        from config import ENABLE_GOOGLE_CALENDAR, GOOGLE_CALENDAR_CREDENTIALS_FILE
-        from pathlib import Path
-        import os
-        
-        BASE_DIR = Path(__file__).resolve().parent
-        credentials_path = BASE_DIR / GOOGLE_CALENDAR_CREDENTIALS_FILE
-        
-        status = {
-            "enabled": ENABLE_GOOGLE_CALENDAR,
-            "credentials_file_exists": credentials_path.exists(),
-            "credentials_file_path": str(credentials_path),
-            "dependencies_installed": False
-        }
-        
-        # Check if dependencies are installed
-        try:
-            import google.auth.transport.requests
-            import google.oauth2.credentials
-            import google_auth_oauthlib.flow
-            import googleapiclient.discovery
-            status["dependencies_installed"] = True
-        except ImportError as e:
-            status["dependencies_error"] = str(e)
-        
-        if not ENABLE_GOOGLE_CALENDAR:
-            status["message"] = "Google Calendar API is disabled in config.py"
-        elif not credentials_path.exists():
-            status["message"] = f"credentials.json not found at {credentials_path}. See API_SETUP.md for setup instructions."
-        elif not status["dependencies_installed"]:
-            status["message"] = "Google Calendar dependencies not installed. Run: pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib"
-        else:
-            status["message"] = "Google Calendar API is ready! Try creating a booking to test it."
-        
-        return jsonify(status), 200
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
 
 # RUN LOCALLY PORT 5000
 #app entry point

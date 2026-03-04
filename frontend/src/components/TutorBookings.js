@@ -381,18 +381,6 @@ const TutorBookings = ({ tutorId }) => {
                         </div>
                       ) : (booking.status === "confirmed" || booking.status === "accepted") ? (
                         <div className="d-flex gap-2 flex-wrap">
-                          {/* Iteration 7 - Join Teams Meeting button */}
-                          {booking.meeting_url && (
-                            <a
-                              href={booking.meeting_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="btn btn-sm btn-primary"
-                              title="Join Teams Meeting"
-                            >
-                              Join Meeting
-                            </a>
-                          )}
                           <button
                             className="btn btn-sm btn-outline-info"
                             onClick={() => setShowMessagesForBooking(
