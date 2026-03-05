@@ -203,7 +203,7 @@ const CalendarView = ({ userId, role }) => {
                           className={`calendar-booking badge bg-${getStatusBadge(booking.status)} mb-1`}
                           onClick={() => setSelectedBooking(booking)}
                           style={{ cursor: 'pointer', display: 'block' }}
-                          title={`${formatTime(booking.session_time)} - ${role === 'tutor' ? (booking.learner_first_name || 'Learner') : (booking.tutor_name || 'Tutor')}`}
+                          title={`${formatTime(booking.session_time)} - ${role === 'tutor' ? (booking.learner_name || 'Learner') : (booking.tutor_name || 'Tutor')}`}
                         >
                           {formatTime(booking.session_time)}
                         </div>
@@ -244,7 +244,7 @@ const CalendarView = ({ userId, role }) => {
                     </p>
                     {role === 'tutor' ? (
                       <>
-                        <p><strong>Learner:</strong> {selectedBooking.learner_first_name} {selectedBooking.learner_last_name}</p>
+                        <p><strong>Learner:</strong> {selectedBooking.learner_name}</p>
                         {selectedBooking.learner_email && (
                           <p><strong>Email:</strong> {selectedBooking.learner_email}</p>
                         )}
