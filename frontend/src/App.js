@@ -73,7 +73,8 @@ function App() {
 
   // STUDENT SYSTEM STATE + LOGIC
   // reference , https://www.w3schools.com/REACT/react_usestate.asp
-  const [students, setStudents] = useState([]); //stores the current list of students fetched from backend  
+  // UNUSED - Iteration 1 dead code (students page is unreachable via navigation)
+  // const [students, setStudents] = useState([]); //stores the current list of students fetched from backend
 
   // Iteration 2 addition  for tutor bookings dropdown
   // NOTE: Currently unused - kept for potential future use
@@ -82,12 +83,14 @@ function App() {
   // eslint-disable-next-line no-unused-vars
   const [tutors, setTutors] = useState([]);
 
+  /* UNUSED - Iteration 1 dead code
   const [formData, setFormData] = useState({   //holds what the user types in the forms
     first_name: "",
     last_name: "",
     college_email: "",
   });
   const [editId, setEditId] = useState(null); //tracks which student is being edited and null does a new student
+  */
 
   // Iteration 2 addition  for user feedback messages
   // This stores any message I want to show to the user 
@@ -166,7 +169,8 @@ function App() {
     setAuthPage(null); // Iteration 4 - Return to landing page
   };
 
-  const API_URL = `${process.env.REACT_APP_API_URL}/students`; // Flask backend API URL // defines backend endpoint, allows to call flask from react and modify DB
+  // UNUSED - Iteration 1 dead code
+  // const API_URL = `${process.env.REACT_APP_API_URL}/students`; // Flask backend API URL
 
   // Iteration 3 - check for stored user on mount
   // Iteration 4 - Modified to show landing page instead of login
@@ -202,12 +206,13 @@ function App() {
     }
   }, [currentPage, currentUser]);
 
-  // loads all students once the page loads , only occurs once
+  /* UNUSED - Iteration 1 dead code
   useEffect(() => {
     if (currentUser) { // Only fetch if user is logged in
       fetchStudents();
     }
   }, [currentUser]);
+  */
 
   // Iteration 3 - Removed tutor fetching for dropdowns since tutors now see only their own data
   
@@ -223,6 +228,7 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, currentPage, availablePages]);
 
+  /* UNUSED - Iteration 1 dead code
   const fetchStudents = async () => {  // function sends a get request to flask to get all stidents and show in frontend table
     try {
       const res = await fetch(API_URL);//
@@ -232,6 +238,7 @@ function App() {
       console.error("Error fetching students:", error);//
     }
   };
+  */
 
   // Iteration 2 addition - fetch tutors for bookings dropdown
   // NOTE: Currently unused - kept for potential future use
@@ -251,8 +258,7 @@ function App() {
     }
   };
 
-  //got from chatgpt - prompt is in my word doc atm
-  // handles editing and updating students
+  /* UNUSED - Iteration 1 dead code
   const handleSubmit = async (e) => {
     e.preventDefault();
     // chatgpt to here -end
@@ -330,6 +336,7 @@ function App() {
       console.error("Error deleting student:", error);//shows if error with deleting student
     }
   };
+  */
 
   // ////////////////////
   // FRONTEND DISPLAY
@@ -568,7 +575,8 @@ function App() {
       <div className="flex-grow-1">
         {/*  Conditional Rendering - Only show pages user has access to */}
       {/* Note: Students page removed from role-based navigation - only accessible via direct URL if admin */}
-      {currentPage === "students" && currentUser?.role === 'admin' && (
+      {/* UNUSED - Iteration 1 dead code (students page is unreachable — 'students' is never added to availablePages) */}
+      {false && currentPage === "students" && currentUser?.role === 'admin' && (
         // Iteration 2 - Enhanced container with Bootstrap styling
         <div className="container">
           {/* Iteration 2 - Page header with logo */}

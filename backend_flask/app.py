@@ -444,11 +444,7 @@ def add_tutor():
                 UPDATE users SET tutor_id = %s, updated_at = %s WHERE user_id = %s
             """, (new_id, now, user_record["user_id"]))
             conn.commit()
-        else:
-            # Debug: Check what users exist (only print if not found)
-            cursor.execute("SELECT user_id, email, role FROM users WHERE role = 'tutor'")
-            all_tutor_users = cursor.fetchall()
-        
+
         return jsonify({
             "message": "Tutor added successfully!", 
             "tutor_id": new_id,
@@ -457,16 +453,9 @@ def add_tutor():
     except Exception as e:
         if conn:
             conn.rollback()
-        #handles duplicate email constraint
-        return jsonify({"error": "Email already exists"}), 400
-    except Exception as e:
-        if conn:
-            conn.rollback()
+        if "unique" in str(e).lower() or "duplicate" in str(e).lower():
+            return jsonify({"error": "Email already exists"}), 400
         return jsonify({"error": f"Database error: {str(e)}"}), 500
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
     finally:
         # Always close the connection, even if there's an error
         if conn:
@@ -822,11 +811,7 @@ def create_booking():
     except Exception as e:
         if conn:
             conn.close()
-        return jsonify({"error": str(e)}), 400
-    except Exception as e:
-        if conn:
-            conn.close()
-        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
+        return jsonify({"error": str(e)}), 500
 
 
 # Gets all bookings for a specific tutor
@@ -918,7 +903,7 @@ def get_tutor_bookings(tutor_id):
     conn.close()
 
     # Convert to list of dictionaries
-    # Iteration 4 - Helper function to safely get module from sqlite3.Row
+    # Helper function to safely get module
     def get_module_safe(booking_row):
         try:
             return booking_row["module"]
@@ -1034,7 +1019,7 @@ def get_learner_bookings(learner_id):
     conn.close()
 
     # Convert to list of dictionaries
-    # Iteration 4 - Helper function to safely get module from sqlite3.Row
+    # Helper function to safely get module
     def get_module_safe(booking_row):
         try:
             return booking_row["module"]
@@ -1225,7 +1210,6 @@ def get_all_bookings():
         
         # Auto-complete bookings where session time has passed
         now = datetime.now()
-        completed_count = 0
         for booking in bookings:
             if booking["status"] in ["pending", "confirmed"]:
                 # Check if session time has passed
@@ -1279,7 +1263,6 @@ def get_all_bookings():
                                 WHERE booking_id = %s AND status IN ('pending', 'confirmed')
                             """, (now, booking["booking_id"]))
                             conn.commit()
-                            completed_count += 1
                     except Exception as e:
                         pass
         # Re-fetch bookings to get updated statuses
@@ -1287,7 +1270,7 @@ def get_all_bookings():
         twenty_four_hours_ago = now - timedelta(hours=24)
         twenty_four_hours_ago_str = twenty_four_hours_ago.strftime("%Y-%m-%d %H:%M:%S")
         cursor.execute("""
-            SELECT b.*, 
+            SELECT b.*,
                    s.first_name as learner_first_name, s.last_name as learner_last_name, s.college_email as learner_email,
                    t.first_name as tutor_first_name, t.last_name as tutor_last_name, t.modules, t.hourly_rate
             FROM bookings b
@@ -1300,7 +1283,7 @@ def get_all_bookings():
         conn.close()
 
         # Convert to list of dictionaries
-        # Iteration 4 - Helper function to safely get module from sqlite3.Row
+        # Helper function to safely get module
         def get_module_safe(booking_row):
             try:
                 return booking_row["module"]
@@ -1636,8 +1619,6 @@ def generate_platform_report():
         
     except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
-    except Exception as e:
-        return jsonify({"error": f"Error generating report: {str(e)}"}), 500
 # End Iteration 4 - Admin platform report
 
 # Story 12 - Create review endpoint
@@ -1862,10 +1843,6 @@ def get_all_users():
         if conn:
             conn.close()
         return jsonify({"error": f"Database error: {str(e)}"}), 500
-    except Exception as e:
-        if conn:
-            conn.close()
-        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
 
 @app.route('/api/admin/change-password', methods=['PUT'])
 def change_admin_password():
@@ -1930,11 +1907,6 @@ def change_admin_password():
             conn.rollback()
             conn.close()
         return jsonify({"error": f"Database error: {str(e)}"}), 500
-    except Exception as e:
-        if conn:
-            conn.rollback()
-            conn.close()
-        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
 
 @app.route('/api/admin/users/<int:user_id>/status', methods=['PUT'])
 def update_user_status(user_id):
@@ -1992,14 +1964,6 @@ def update_user_status(user_id):
             conn.rollback()
             conn.close()
         return jsonify({"error": f"Database error: {str(e)}"}), 500
-    except Exception as e:
-        if conn:
-            conn.rollback()
-            conn.close()
-        print(f"[ERROR] Unexpected error in update_user_status: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
 
 # Iteration 6 - Admin create admin account
 # ref: https://claude.ai/share/3e13c9fc-19f7-430c-b698-534f25042439
@@ -2174,8 +2138,6 @@ def serve_proof_document(tutor_id):
         return response
     except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
-    except Exception as e:
-        return jsonify({"error": f"Error serving file: {str(e)}"}), 500
 # End Story 15 - Serve proof documents
 
 ###################
@@ -2333,10 +2295,6 @@ def get_tutor_profile(tutor_id):
         return jsonify(profile_data), 200
     except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
     finally:
         if conn:
             conn.close()
@@ -2622,8 +2580,6 @@ def get_available_slots(tutor_id):
         }), 200
     except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
-    except Exception as e:
-        return jsonify({"error": f"Error generating slots: {str(e)}"}), 500
     finally:
         if conn:
             conn.close()
@@ -2707,7 +2663,6 @@ def deny_booking(booking_id):
         if conn:
             conn.close()
 
-# Iteration 4 - Send a message for a booking
 # ChatGPT conversation reference: https://chatgpt.com/share/6984af21-d9ac-8008-a016-f00a20286dd1
 @app.route('/api/bookings/<int:booking_id>/messages', methods=['POST'])
 def send_message(booking_id):
@@ -2776,7 +2731,6 @@ def send_message(booking_id):
         if conn:
             conn.close()
 
-# Iteration 4 - Get all messages for a booking
 # ChatGPT conversation reference: https://chatgpt.com/share/6984af21-d9ac-8008-a016-f00a20286dd1
 @app.route('/api/bookings/<int:booking_id>/messages', methods=['GET'])
 def get_booking_messages(booking_id):
@@ -2846,7 +2800,6 @@ def get_booking_messages(booking_id):
         if conn:
             conn.close()
 
-# Iteration 4 - Get all messages for a user (learner or tutor)
 # ChatGPT conversation reference: https://chatgpt.com/share/6984af21-d9ac-8008-a016-f00a20286dd1
 @app.route('/api/messages', methods=['GET'])
 def get_user_messages():
@@ -3031,8 +2984,6 @@ def get_learner_earnings(learner_id):
         return jsonify(result), 200
     except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
-    except Exception as e:
-        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
     finally:
         if conn:
             conn.close()
@@ -3125,8 +3076,6 @@ def get_tutor_earnings(tutor_id):
         return jsonify(result), 200
     except Exception as e:
         return jsonify({"error": f"Database error: {str(e)}"}), 500
-    except Exception as e:
-        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
     finally:
         if conn:
             conn.close()
@@ -3267,13 +3216,11 @@ def register_user():
             "role": role,
             "student_id": created_student_id
         }), 201
-    except Exception:
-        if conn:
-            conn.rollback()
-        return jsonify({"error": "Email already exists"}), 400
     except Exception as e:
         if conn:
             conn.rollback()
+        if "unique" in str(e).lower() or "duplicate" in str(e).lower():
+            return jsonify({"error": "Email already exists"}), 400
         return jsonify({"error": f"Database error: {str(e)}"}), 500
     finally:
         # Always close the connection, even if there's an error
@@ -3366,10 +3313,7 @@ def login_user():
                     UPDATE users SET tutor_id = %s, updated_at = %s WHERE user_id = %s
                 """, (tutor_id, now, user["user_id"]))
                 conn.commit()
-            else:
-                cursor.execute("SELECT tutor_id, college_email FROM tutors")
-                all_tutors = cursor.fetchall()
-        
+
         # Refresh user data from database to get latest tutor_id/student_id after any updates
         cursor.execute("SELECT student_id, tutor_id FROM users WHERE user_id = %s", (user["user_id"],))
         updated_user = cursor.fetchone()
@@ -3389,13 +3333,6 @@ def login_user():
         if conn:
             conn.rollback()
         return jsonify({"error": f"Database error: {str(e)}"}), 500
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        print(f"[ERROR] Unexpected error in login_user: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
     finally:
         # Always close the connection, even if there's an error
         if conn:

@@ -173,7 +173,6 @@ const TutorSignup = () => {
               setTimeout(() => {
                 window.location.reload();
               }, 2000);
-            } else {
             }
           } catch (error) {
             console.error("Error parsing stored user:", error);

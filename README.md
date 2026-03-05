@@ -10,8 +10,8 @@ The idea came from the lack of a centralised, easy-to-use platform for student-t
 
 The app is deployed and accessible at:
 
-- **Frontend (Vercel):** https://your-vercel-url.vercel.app
-- **Backend (Render):** https://your-render-url.onrender.com
+- **Frontend (Vercel):** https://fyp-project-murex.vercel.app
+- **Backend (Render):** https://studyhive-backend-bn00.onrender.com
 
 ---
 

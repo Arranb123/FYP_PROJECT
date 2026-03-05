@@ -12,11 +12,6 @@ if _env_path.exists():
     load_dotenv(_env_path)
 
 # Google Calendar API Configuration
-# Get your credentials from: https://console.cloud.google.com/
-# 1. Create a new project
-# 2. Enable Google Calendar API
-# 3. Create OAuth 2.0 credentials
-# 4. Download credentials.json and place it in backend_flask/
 # Reference: https://chatgpt.com/share/6984a96d-f0cc-8008-abdc-dc3fe4261951
 GOOGLE_CALENDAR_CREDENTIALS_FILE = os.getenv('GOOGLE_CALENDAR_CREDENTIALS', 'credentials.json')
 GOOGLE_CALENDAR_TOKEN_FILE = os.getenv('GOOGLE_CALENDAR_TOKEN', 'token.json')
@@ -26,14 +21,13 @@ GOOGLE_CALENDAR_TOKEN_FILE = os.getenv('GOOGLE_CALENDAR_TOKEN', 'token.json')
 # Free tier: 100 emails/day
 # Iteration 4 - SendGrid API key configured
 # Reference: https://chatgpt.com/share/6984a96d-f0cc-8008-abdc-dc3fe4261951
-SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY', 'YOUR_SENDGRID_API_KEY_HERE')
+SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY', '')
 SENDGRID_FROM_EMAIL = os.getenv('SENDGRID_FROM_EMAIL', '122375536@umail.ucc.ie')  # Iteration 4 - Verified sender email
 
 # Timezone API Configuration
 # Using free API: https://timezoneapi.io/ (free tier available)
 # Alternative: WorldTimeAPI (completely free, no key needed)
 # Reference: https://chatgpt.com/share/6984a96d-f0cc-8008-abdc-dc3fe4261951
-TIMEZONE_API_ENABLED = True
 
 # Feature flags - enable/disable APIs
 # Set to True to enable, False to disable

@@ -1,5 +1,5 @@
 // Iteration 4 - Landing Page Component
-// A modern, professional landing page that introduces StudyHive
+// introduces StudyHive
 // ref: Bootstrap 5.3 components - https://getbootstrap.com/docs/5.3/components/
 
 import React from "react";

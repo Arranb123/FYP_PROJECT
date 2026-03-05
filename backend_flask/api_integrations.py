@@ -3,7 +3,6 @@
 # ChatGPT conversation reference: https://chatgpt.com/share/6984a96d-f0cc-8008-abdc-dc3fe4261951
 
 import os
-import json
 from datetime import datetime, timedelta
 from pathlib import Path
 import requests
@@ -121,7 +120,6 @@ def create_google_calendar_event(booking_data, learner_email, tutor_email, learn
         }
     
     except Exception as e:
-        pass
         return {
             "success": False,
             "message": f"Failed to create calendar event: {str(e)}"
@@ -260,18 +258,5 @@ def get_timezone_info(latitude=None, longitude=None, timezone_name=None):
             "message": "Timezone information unavailable"
         }
 
-
-def convert_to_utc(local_datetime, timezone_name):
-    # Converts local datetime to UTC using timezone info
-    # Returns UTC datetime object
-    try:
-        import pytz
-        local_tz = pytz.timezone(timezone_name)
-        local_dt = local_tz.localize(local_datetime)
-        utc_dt = local_dt.astimezone(pytz.UTC)
-        return utc_dt
-    except Exception as e:
-        print(f"[ERROR] Timezone conversion error: {e}")
-        return local_datetime  # Return original if conversion fails
 
 

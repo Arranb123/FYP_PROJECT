@@ -77,8 +77,8 @@ const TutorBookings = ({ tutorId }) => {
   // If the user selects a different tutor, it fetches that tutor's bookings
   useEffect(() => {
     fetchBookings();
-  }, [tutorId, fetchBookings]);
-  
+  }, [tutorId, fetchBookings]);  // Include both tutorId and fetchBookings in dependencies
+
   // Iteration 4 - Function to accept a booking
   const handleAcceptBooking = async (bookingId) => {
     setActionLoadingId(bookingId);
@@ -127,7 +127,7 @@ const TutorBookings = ({ tutorId }) => {
       // Clear message after 3 seconds
       setTimeout(() => setActionMessage({ type: "", text: "" }), 3000);
     }
-  };  // Include both tutorId and fetchBookings in dependencies
+  };
 
   // UX Improvement - Calculate quick stats
   const stats = useMemo(() => {

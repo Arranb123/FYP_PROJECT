@@ -78,7 +78,7 @@ function AdminDashboard({ onLogout, currentUser }) {
   const [activeSection, setActiveSection] = useState('dashboard'); // Default to dashboard
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
-  // Settings modal state
+  // UX Improvement - Admin settings modal state (change password)
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [passwordForm, setPasswordForm] = useState({
     current_password: '',
@@ -226,7 +226,7 @@ function AdminDashboard({ onLogout, currentUser }) {
     }
   };
 
-  // Handle password change
+  // UX Improvement - Handle password change
   const handlePasswordChange = async (e) => {
     e.preventDefault();
     setPasswordError('');
@@ -507,10 +507,7 @@ function AdminDashboard({ onLogout, currentUser }) {
                 <i className="bi bi-person-circle me-2"></i> Admin
               </CDropdownToggle>
               <CDropdownMenu>
-                <CDropdownItem href="#">
-                  <i className="bi bi-person me-2"></i>Profile
-                </CDropdownItem>
-                <CDropdownItem 
+                <CDropdownItem
                   href="#"
                   onClick={(e) => {
                     e.preventDefault();
@@ -1034,7 +1031,7 @@ function AdminDashboard({ onLogout, currentUser }) {
                 </div>
               ) : report ? (
                 <>
-                {/* stats grid - coreui CRow and CCol from the template */}
+                {/* stats grid - intentionally repeated here for full report view (dashboard section shows a summary only) */}
                 <CRow className="g-4 mb-4">
                   <CCol md={3}>
                     <CCard>
